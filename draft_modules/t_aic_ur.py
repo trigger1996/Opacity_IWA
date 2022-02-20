@@ -144,6 +144,8 @@ def dfs_ur(dfs_tree, sc, source=None, depth_limit=None):
                     event_t = list(sc_t)[0]
                     t = list(sc_t)[1]
                     if event_t == dfs_tree.edges[parent, child, 0]['event'] and dfs_tree.edges[parent, child, 0]['t_min'] <= t:
+                    #if event_t == dfs_tree.edges[parent, child, 0]['event'] and dfs_tree.edges[parent, child, 0]['t_min'] <= t \
+                    #   and dfs_tree.edges[parent, child, 0]['t_max'] > t:                                                       # 在aic的dfs搜索过程中对t_min的判断还是要有的，不信删掉走一下就会发现结果很离谱
                         is_edge_reachable = True
                         break
                 if not is_edge_reachable:
@@ -157,18 +159,6 @@ def dfs_ur(dfs_tree, sc, source=None, depth_limit=None):
 
             except StopIteration:
                 stack.pop()
-
-def state_type(state):
-    if list(state).__len__() == 2:      ## 先用2，后面要记得改成3
-        return 'Z_state'
-    else:
-        return 'Y_state'
-
-def get_policy_event(state):
-    policy_events = []
-    for policy_t in state[1]:       ## 后面要改成state[2]
-        policy_events.append(policy_t[0])
-    return policy_events
 
 def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
     # 把初始点设置为Y state
@@ -251,91 +241,29 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                     ur_new = []
                     ur.append(curr_node)
                     for edge_t in reachable_edge:
-                        if dfs_tree.edges[edge_t[0], edge_t[1], 0]['event'] in event_uo:       # 只有不可观边能到达的才是ur,至于为什么不在dfs里处理，那是因为这么做会影响得到的决策数据
-                            ur.append(list(edge_t)[1])                                          # 可以发生transition的终点都是可达的点
-                    ur = list(set(ur))                                                          # set(): 构造集合, 避免排序带来的问题
-                    ur.sort()
+                        ur.append(list(edge_t)[1])          # 可以发生transition的终点都是可达的点
 
                     z_state = (tuple(ur), tuple(supervisior_curr))
 
-                    if z_state == (('0', '1'), (('a', 3),)):
-                        print(23333)
-
-                    is_state_listed = False
-                    for state_t in bts.nodes():
-                        if state_type(z_state) == state_type(state_t) and \
-                           state_t[0] == z_state[0] and \
-                           set(get_policy_event(state_t)) == set(get_policy_event(z_state)):
-                            is_state_listed = True
-                            break
-
-                    if is_state_listed:
-                        for edge_t in bts.in_edges(state_t, data=True):
-                            # 更新点
-                            # bts.remove_node(edge_t[0])
-                            # bts.add_node(z_state)
-
-                            # 更新边
-                            # bts.remove_node(edge_t[0], edge_t[1])
-                            sc_last = bts.edges[edge_t[0], edge_t[1], 0]['control']
-
-                            event_last_list = []
-                            for sc_timed_last in sc_last:
-                                event_last_list.append(list(sc_timed_last)[0])
-
-                            for sc_timed_t in supervisior_curr:
-                                event_t = list(sc_timed_t)[0]
-                                for sc_timed_last in sc_last:
-                                    event_last = list(sc_timed_last)[0]
-
-                                    # 如果这一个控制是存在的，那么则更新，扩大其时间区间
-                                    if event_t in event_last_list and event_t != event_last:
-                                        continue
-                                    elif event_t in event_last_list and event_t == event_last:
-                                        index = event_last_list.index(event_last)
-
-                                        start_t = bts.edges[edge_t[0], edge_t[1], 0]['control'][index][1]
-                                        if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
-                                            end_t = float("inf")
-                                        else:
-                                            end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
-                                        if end_t > bts.edges[edge_t[0], edge_t[1], 0]['control'][index][2]:
-                                            bts.edges[edge_t[0], edge_t[1], 0]['control'][index] = (event_t, start_t, end_t)
-                                        #print(233)
-                                        # 否则加入该控制
-                                    # 这里不能允许新加入，新加入的就不是一个控制了
-                                    '''
-                                    else:
-                                        event_t = list(sc_timed_t)[0]
-                                        start_t = list(sc_timed_t)[1]
-                                        if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
-                                            end_t = float("inf")
-                                        else:
-                                            end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
-                                        bts.edges[edge_t[0], edge_t[1], 0]['control'].append((event_t, start_t, end_t))
-                                        event_last_list.append(event_t)
-                                        #print(466)
-                                    '''
-
-                    else:
+                    if z_state not in bts.nodes():   ## 这里增加一个思路，就是更新状态， 如果当前状态和上一状态可达点相同，那么只更新状态，否则才是增加状态
                         bts.add_node(z_state)
 
-                        # 增加边
-                        sc_duration = []
-                        for sc_timed_t in supervisior_curr:
-                            event_t = list(sc_timed_t)[0]
-                            start_t = list(sc_timed_t)[1]
-                            if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
-                                end_t = float("inf")
-                            else:
-                                end_t   = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
-                            sc_duration.append((event_t, start_t, end_t))
+                    # 增加边
+                    sc_duration = []
+                    for sc_timed_t in supervisior_curr:
+                        event_t = list(sc_timed_t)[0]
+                        start_t = list(sc_timed_t)[1]
+                        if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
+                            end_t = float("inf")
+                        else:
+                            end_t   = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
+                        sc_duration.append((event_t, start_t, end_t))
 
-                        bts.add_edge(last_state, z_state, control=sc_duration)
+                    bts.add_edge(last_state, z_state, attr_dict=sc_duration)
 
-                        # ITERATION
-                        lastly_add_edge = [last_state, z_state, sc_duration]    # 这个玩意在前面更新节点的时候有用
-                        last_state = z_state                                    # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
+                    # ITERATION
+                    last_state = z_state                    # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
+
                 except:
                     pass
 
