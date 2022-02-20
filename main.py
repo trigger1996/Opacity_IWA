@@ -251,15 +251,12 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                     ur_new = []
                     ur.append(curr_node)
                     for edge_t in reachable_edge:
-                        if dfs_tree.edges[edge_t[0], edge_t[1], 0]['event'] in event_uo:       # 只有不可观边能到达的才是ur,至于为什么不在dfs里处理，那是因为这么做会影响得到的决策数据
+                        if dfs_tree.edges[edge_t[0], edge_t[1], 0]['event'] in event_uo:        # 只有不可观边能到达的才是ur,至于为什么不在dfs里处理，那是因为这么做会影响得到的决策数据
                             ur.append(list(edge_t)[1])                                          # 可以发生transition的终点都是可达的点
                     ur = list(set(ur))                                                          # set(): 构造集合, 避免排序带来的问题
                     ur.sort()
 
                     z_state = (tuple(ur), tuple(supervisior_curr))
-
-                    if z_state == (('0', '1'), (('a', 3),)):
-                        print(23333)
 
                     is_state_listed = False
                     for state_t in bts.nodes():
@@ -394,7 +391,8 @@ def main():
         labels.update({edge_t : str('[' + str(min_t) + ', ' + str(max_t) + ']')})
     nx.draw_networkx_edge_labels(dfs_tree, pos, edge_labels=labels, font_color="c")  # 显示权值
     '''
-    nx.draw(bts)
+    nx.draw(bts, pos=nx.spring_layout(bts), with_labels=True, font_size=6.5) # https://www.jianshu.com/p/e254cd6acfdc/
+                                                                          # https://blog.csdn.net/HsinglukLiu/article/details/107821649
 
     plt.show()
 
