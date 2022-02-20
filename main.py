@@ -199,70 +199,83 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
     ###################################################################################################################
     #
     # 这一部分应该才开始迭代
-    Y_state = bts_start
-    for y_node in Y_state:
 
-        curr_node = y_node                          # 预留这个，方便迭代
+    # 核心思路：Z->Z的状态，可以通过dfs_tree全部求出
+    #         所以我们只要求出下一时刻的Y状态
+    #         同时，应注意，到达Y状态，supervisor清零，所以其实不用特别在意时间，只是求NX(·)的时候注意时间就好了
+    # 思路：
+    # 1 对Y state的每一个点求dfs_tree
+    # 2
+    # 结束条件：没有新的y_state可生成
+    y_stack = []
+
+    y_stack.append(tuple(bts_start))
+    while y_stack:
+        # 编程的时候你就想着，如果这个自动机有两个入口你怎么办
+        current_state = y_stack.pop()
 
         for sc in supervisior_ut:
-            dfs_tree = dfs_events(iwa, sc, curr_node)
-            t_interval = timeslice(dfs_tree)
+            t_interval = []
 
-            # 求出不同事件对应的时间的最大值
             max_time_uo = {}
+            min_time_uo = {}
+            sc_event_tuple = []
             for event_t in list(sc):
                 max_time_uo.update({event_t: -1})
-            for u, v, data in dfs_tree.out_edges(data=True):                 # u, v, data in dfs_tree.out_edges(curr_node, data=True)
-                if data['event'] in sc and data['t_max'] > max_time_uo[event_t]:
-                        max_time_uo[data['event']] = data['t_max']
+                min_time_uo.update({event_t: 1e6})
+            for current_node in current_state:
+                dfs_tree = dfs_events(iwa, sc, current_node)                    ## 待增加对环状结构的适应性
+                t_interval = list(set(t_interval) | set(timeslice(dfs_tree)))
 
+                # 求出不同事件对应的时间的最大值
+                for u, v, data in dfs_tree.out_edges(data=True):                 # u, v, data in dfs_tree.out_edges(curr_node, data=True)
+                    if data['event'] in sc and data['t_max'] > max_time_uo[event_t]:
+                        max_time_uo[data['event']] = data['t_max']
+                    if data['event'] in sc and data['t_min'] < min_time_uo[event_t]:
+                        min_time_uo[data['event']] = data['t_min']              # 用了个笨办法来处理可观可控事件，因为它不能往下走，所以对他的使能时间有个限制
 
             # 从timeslice内选取不超过时间最大值的时间，给对应事件
-            sc_event_tuple = []
             for _iter in max_time_uo.keys():
                 sc_timed_t = []
                 for t in t_interval:
-                    if t <= max_time_uo[_iter]:
+                    if _iter not in event_uo and t >= min_time_uo[_iter] and t <= max_time_uo[_iter]:
+                        sc_timed_t.append((_iter, t))
+                    elif _iter in event_uo and t <= max_time_uo[_iter]:
                         sc_timed_t.append((_iter, t))
                 if sc_timed_t.__len__() != 0:
                     sc_event_tuple.append(sc_timed_t)       # 加入非空元素
 
-            # 所有可能对应的时间，去各取一个
-            # {'a': [1, 2, 3, 4, 5, 6, 7, 9], 'b': [1, 2, 3, 4, 5, 6, 7], 'o3': [1, 2, 3, 4, 5, 6], 'uc': []}
-            # 取出(a, 1), (b, 2), (o3, 1)
             sc_set = list(product(*sc_event_tuple))                 # https://blog.csdn.net/weixin_39652760/article/details/110774080
                                                                     # https://blog.csdn.net/liuqiang3/article/details/99707294
             sc_set = [list(_iter) for _iter in sc_set]              # tuple -> list
                                                                     # 而且最后拿到的数据是排序排好的，这里就不用考虑连接问题
 
-
-            last_state = Y_state
+            last_state = current_state
             for supervisior_curr in sc_set:
+                ur = []
+                ur_new = []
 
-                # dfs遍历生成的树
-                # 起点：当前状态所有的点
-                # 目标：找到所有的可达点
                 try:
-                    reachable_edge = list(dfs_ur(dfs_tree, supervisior_curr, source=curr_node))
-                    #print(supervisior_curr, reachable_edge)
+                    for current_node in current_state:
+                        sc = [sc_ut[0] for sc_ut in supervisior_curr]
+                        dfs_tree = dfs_events(iwa, sc, current_node)
+                        reachable_edge = list(dfs_ur(dfs_tree, supervisior_curr, source=current_node))
 
-                    # edge -> 可达点
-                    ur = []
-                    ur_new = []
-                    ur.append(curr_node)
-                    for edge_t in reachable_edge:
-                        if dfs_tree.edges[edge_t[0], edge_t[1], 0]['event'] in event_uo:        # 只有不可观边能到达的才是ur,至于为什么不在dfs里处理，那是因为这么做会影响得到的决策数据
-                            ur.append(list(edge_t)[1])                                          # 可以发生transition的终点都是可达的点
-                    ur = list(set(ur))                                                          # set(): 构造集合, 避免排序带来的问题
-                    ur.sort()
+                        # edge -> 可达点
+                        ur.append(current_node)
+                        for edge_t in reachable_edge:
+                            if dfs_tree.edges[edge_t[0], edge_t[1], 0]['event'] in event_uo:            # 只有不可观边能到达的才是ur,至于为什么不在dfs里处理，那是因为这么做会影响得到的决策数据
+                                ur.append(list(edge_t)[1])                                              # 可以发生transition的终点都是可达的点
+                        ur = list(set(ur))
+                        ur.sort()
 
                     z_state = (tuple(ur), tuple(supervisior_curr))
 
                     is_state_listed = False
                     for state_t in bts.nodes():
                         if state_type(z_state) == state_type(state_t) and \
-                           state_t[0] == z_state[0] and \
-                           set(get_policy_event(state_t)) == set(get_policy_event(z_state)):
+                                state_t[0] == z_state[0] and \
+                                set(get_policy_event(state_t)) == set(get_policy_event(z_state)):
                             is_state_listed = True
                             break
 
@@ -298,7 +311,7 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                             end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
                                         if end_t > bts.edges[edge_t[0], edge_t[1], 0]['control'][index][2]:
                                             bts.edges[edge_t[0], edge_t[1], 0]['control'][index] = (event_t, start_t, end_t)
-                                        #print(233)
+                                        # print(233)
                                         # 否则加入该控制
                                     # 这里不能允许新加入，新加入的就不是一个控制了
                                     '''
@@ -325,21 +338,25 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                             if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
                                 end_t = float("inf")
                             else:
-                                end_t   = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
+                                end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
                             sc_duration.append((event_t, start_t, end_t))
 
                         bts.add_edge(last_state, z_state, control=sc_duration)
 
                         # ITERATION
-                        lastly_add_edge = [last_state, z_state, sc_duration]    # 这个玩意在前面更新节点的时候有用
-                        last_state = z_state                                    # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
-                except:
+                        last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
+
+                except KeyError:
                     pass
 
-        # 这段代码没啥用
-        maxIndex = 1  # Here
-        for u, v, data in dfs_tree.in_edges(curr_node, data=True):        # https://stackoverflow.com/questions/37230751/networkx-get-all-in-edges-of-a-node
-            print(u, v, data)
+            for current_node in current_state:
+                print(233)
+
+
+        # 下一步
+        # 验证UR的求解
+        # 同时计算Y state
+        # 如果没有Y State则停止迭代
 
     return bts
 
@@ -362,7 +379,7 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    bts = t_aic_onestep(iwa, '0', event_uo, event_o, event_c, event_uc)
+    bts = t_aic_onestep(iwa, ['0', '6'], event_uo, event_o, event_c, event_uc)
 
     '''
         Plotting
