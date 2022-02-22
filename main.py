@@ -2,6 +2,7 @@
 import networkx as nx
 import io
 import yaml
+import copy
 import matplotlib.pyplot as plt # 导入 Matplotlib 工具包
 from itertools import combinations, product
 
@@ -159,7 +160,7 @@ def dfs_ur(dfs_tree, sc, source=None, depth_limit=None):
                 stack.pop()
 
 def state_type(state):
-    if list(state).__len__() == 2:      ## 先用2，后面要记得改成3
+    if type(state[0]) == tuple and list(state).__len__() == 2:      ## 先用2，后面要记得改成3，判断方式也要细改一下
         return 'Z_state'
     else:
         return 'Y_state'
@@ -169,6 +170,13 @@ def get_policy_event(state):
     for policy_t in state[1]:       ## 后面要改成state[2]
         policy_events.append(policy_t[0])
     return policy_events
+
+def get_policy_dict(state):
+    policy = {}
+    for policy_t in state[1]:       ## 后面要改成state[2]
+        policy.update({policy_t[0] : policy_t[1]})
+    return policy
+
 
 def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
     # 把初始点设置为Y state
@@ -208,8 +216,10 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
     # 2
     # 结束条件：没有新的y_state可生成
     y_stack = []
+    visited = []
 
     y_stack.append(tuple(bts_start))
+    visited.append(tuple(bts_start))
     while y_stack:
         # 编程的时候你就想着，如果这个自动机有两个入口你怎么办
         current_state = y_stack.pop()
@@ -240,7 +250,7 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                 for t in t_interval:
                     if _iter not in event_uo and t >= min_time_uo[_iter] and t <= max_time_uo[_iter]:
                         sc_timed_t.append((_iter, t))
-                    elif _iter in event_uo and t <= max_time_uo[_iter]:
+                    elif _iter in event_uo and t <= max_time_uo[_iter]:         # 如果不加 _iter in event_uo 会出错
                         sc_timed_t.append((_iter, t))
                 if sc_timed_t.__len__() != 0:
                     sc_event_tuple.append(sc_timed_t)       # 加入非空元素
@@ -250,7 +260,7 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
             sc_set = [list(_iter) for _iter in sc_set]              # tuple -> list
                                                                     # 而且最后拿到的数据是排序排好的，这里就不用考虑连接问题
 
-            last_state = current_state
+            #last_state = current_state
             for supervisior_curr in sc_set:
                 ur = []
                 ur_new = []
@@ -328,9 +338,7 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                     '''
 
                     else:
-                        bts.add_node(z_state)
-
-                        # 增加边
+                        # 这一段都是为了再算边的信息, add_edge这里才决定了根节点
                         sc_duration = []
                         for sc_timed_t in supervisior_curr:
                             event_t = list(sc_timed_t)[0]
@@ -341,22 +349,83 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                 end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
                             sc_duration.append((event_t, start_t, end_t))
 
-                        bts.add_edge(last_state, z_state, control=sc_duration)
+                        root_state = current_state                  # 如果点找不到，就是一定连接当前y_state的
+                        event_tz = get_policy_dict(z_state)
+                        t_max_t = copy.deepcopy(event_tz)
+                        for _iter in t_max_t.keys():
+                            t_max_t[_iter] = -1                     # 初始化，求最大时间
+
+                        for state_t in bts.nodes():                 # 找到 decision中，满足如下条件的点：1 事件完全相符 2 事件对应使能时间都比z_state小 3 满足1、2中，每箱使能时间对应最长
+                            if not state_type(state_t) == 'Z_state':
+                                continue
+                            event_t  = get_policy_dict(state_t)
+                            if event_t.keys() == event_tz.keys():           # 1 事件完全相符
+                                iter_num = 0
+                                for _iter in event_t.keys():
+                                    if event_t[_iter] <= event_tz[_iter]:   # 2 所有事件对应使能时间都比z_state小
+                                        iter_num += 1
+                                if iter_num == event_t.__len__():
+                                    #print(event_t, '\t', event_tz)
+                                    root_state = state_t
+                                    for _iter in event_t.keys():
+                                        t_max_t[_iter] = event_t[_iter]     # 3 满足1、2中，每箱使能时间对应最长
+
+                        # 增加点
+                        bts.add_node(z_state)
+                        # 增加边
+                        bts.add_edge(root_state, z_state, control=sc_duration)
+                        # 这里是将边，当前点，与根节点相连
+                        #bts.add_edge(last_state, z_state, control=sc_duration)
 
                         # ITERATION
-                        last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
+                        #last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
 
                 except KeyError:
                     pass
 
+            '''
             for current_node in current_state:
                 print(233)
+            '''
 
+        # 求NX
+        state_to_add = []
+        edge_to_add  = []
+        for state_t in bts.nodes():
+            # 对所有z_states 求NX
+            if state_t not in visited and state_type(state_t) == 'Z_state':
+                y_state_t = []
+                for node_t in state_t[0]:
+                    for edge_t in iwa.out_edges(node_t, data=True):
+                        if edge_t[2]['event'] in event_o and edge_t[2]['event'] not in event_c:
+                            y_state_t.append(edge_t[1])                                             ## 时间要算过
+
+                        elif edge_t[2]['event'] in event_o and edge_t[2]['event'] in event_c:
+                            pass
+
+                if y_state_t.__len__() > 0 and tuple(y_state_t) not in y_stack:
+                    visited.append(y_state_t)
+                    visited.append(state_t)
+
+                    y_stack.append(tuple(y_state_t))
+                    state_to_add.append(tuple(y_state_t))
+                    edge_to_add.append([state_t, tuple(y_state_t)])                                      ## 这里edge的数据不知道
+
+        print(y_stack, len(bts.nodes()))
+
+        for index in range(0, state_to_add.__len__()):
+            try:
+                if state_to_add[index] not in bts.nodes():
+                    bts.add_node(state_to_add[index])
+                bts.add_edge(edge_to_add[index][0], edge_to_add[index][1])
+            except:
+                pass
 
         # 下一步
         # 验证UR的求解
         # 同时计算Y state
         # 如果没有Y State则停止迭代
+
 
     return bts
 
