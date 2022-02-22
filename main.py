@@ -398,20 +398,27 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                 for node_t in state_t[0]:
                     for edge_t in iwa.out_edges(node_t, data=True):
                         if edge_t[2]['event'] in event_o and edge_t[2]['event'] not in event_c:
-                            y_state_t.append(edge_t[1])                                             ## 时间要算过
+                            if edge_t[1] not in y_state_t:
+                                y_state_t.append(edge_t[1])                                             ## 时间要算过
 
                         elif edge_t[2]['event'] in event_o and edge_t[2]['event'] in event_c:
-                            pass
+                            if edge_t[2]['event'] in get_policy_event(state_t):
+                                if edge_t[1] not in y_state_t:
+                                    y_state_t.append(edge_t[1])                                         ##
 
-                if y_state_t.__len__() > 0 and tuple(y_state_t) not in y_stack:
+                y_state_t = list(set(y_state_t))
+                y_state_t.sort()
+                y_state_t = tuple(y_state_t)
+
+                if y_state_t.__len__() > 0 and y_state_t not in visited:
                     visited.append(y_state_t)
                     visited.append(state_t)
 
-                    y_stack.append(tuple(y_state_t))
-                    state_to_add.append(tuple(y_state_t))
-                    edge_to_add.append([state_t, tuple(y_state_t)])                                      ## 这里edge的数据不知道
+                    y_stack.append(y_state_t)
+                    state_to_add.append(y_state_t)
+                    edge_to_add.append([state_t, y_state_t])                                      ## 这里edge的数据不知道
 
-        print(y_stack, len(bts.nodes()))
+        print(y_stack, state_to_add, len(bts.nodes()))
 
         for index in range(0, state_to_add.__len__()):
             try:
@@ -477,7 +484,7 @@ def main():
         labels.update({edge_t : str('[' + str(min_t) + ', ' + str(max_t) + ']')})
     nx.draw_networkx_edge_labels(dfs_tree, pos, edge_labels=labels, font_color="c")  # 显示权值
     '''
-    nx.draw(bts, pos=nx.spring_layout(bts), with_labels=True, font_size=6.5) # https://www.jianshu.com/p/e254cd6acfdc/
+    nx.draw(bts, pos=nx.spectral_layout(bts), with_labels=True, font_size=6.5) # https://www.jianshu.com/p/e254cd6acfdc/
                                                                           # https://blog.csdn.net/HsinglukLiu/article/details/107821649
 
     plt.show()
