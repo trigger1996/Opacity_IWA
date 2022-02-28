@@ -265,8 +265,11 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                 ur = []
                 ur_new = []
 
-                try:
-                    for current_node in current_state:
+                if current_state == ('5', '8') and supervisior_curr == [('a', 4), ('uc', 1)]:
+                    print(233)
+
+                for current_node in current_state:
+                    try:
                         sc = [sc_ut[0] for sc_ut in supervisior_curr]
                         dfs_tree = dfs_events(iwa, sc, current_node)
                         reachable_edge = list(dfs_ur(dfs_tree, supervisior_curr, source=current_node))
@@ -278,110 +281,125 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                 ur.append(list(edge_t)[1])                                              # 可以发生transition的终点都是可达的点
                         ur = list(set(ur))
                         ur.sort()
+                    except KeyError:
+                        pass
 
-                    z_state = (tuple(ur), tuple(supervisior_curr))
+                z_state = (tuple(ur), tuple(supervisior_curr))
+                if z_state == ((), ()):
+                    continue
 
-                    is_state_listed = False
-                    for state_t in bts.nodes():
-                        if state_type(z_state) == state_type(state_t) and \
-                                state_t[0] == z_state[0] and \
-                                set(get_policy_event(state_t)) == set(get_policy_event(z_state)):
-                            is_state_listed = True
-                            break
+                is_state_listed = False
+                is_state_listed_in_this_y = False
+                for state_t in bts.nodes():
+                    if state_type(z_state) == state_type(state_t) and \
+                            state_t[0] == z_state[0] and \
+                            set(get_policy_event(state_t)) == set(get_policy_event(z_state)):
+                        is_state_listed = True
+                        try:
+                            if nx.dijkstra_path_length(bts, current_state, state_t) >= 0:
+                                is_state_listed_in_this_y = True
+                                break
+                        except:
+                            pass
 
-                    if is_state_listed:
-                        for edge_t in bts.in_edges(state_t, data=True):
-                            # 更新点
-                            # bts.remove_node(edge_t[0])
-                            # bts.add_node(z_state)
+                if is_state_listed and is_state_listed_in_this_y:           # 如果这个点已经有过
+                    for edge_t in bts.in_edges(state_t, data=True):
+                        # 更新点
+                        # bts.remove_node(edge_t[0])
+                        # bts.add_node(z_state)
 
-                            # 更新边
-                            # bts.remove_node(edge_t[0], edge_t[1])
-                            sc_last = bts.edges[edge_t[0], edge_t[1], 0]['control']
+                        # 更新边
+                        # bts.remove_node(edge_t[0], edge_t[1])
+                        sc_last = bts.edges[edge_t[0], edge_t[1], 0]['control']
 
-                            event_last_list = []
-                            for sc_timed_last in sc_last:
-                                event_last_list.append(list(sc_timed_last)[0])
+                        event_last_list = []
+                        for sc_timed_last in sc_last:
+                            event_last_list.append(list(sc_timed_last)[0])
 
-                            for sc_timed_t in supervisior_curr:
-                                event_t = list(sc_timed_t)[0]
-                                for sc_timed_last in sc_last:
-                                    event_last = list(sc_timed_last)[0]
-
-                                    # 如果这一个控制是存在的，那么则更新，扩大其时间区间
-                                    if event_t in event_last_list and event_t != event_last:
-                                        continue
-                                    elif event_t in event_last_list and event_t == event_last:
-                                        index = event_last_list.index(event_last)
-
-                                        start_t = bts.edges[edge_t[0], edge_t[1], 0]['control'][index][1]
-                                        if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
-                                            end_t = float("inf")
-                                        else:
-                                            end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
-                                        if end_t > bts.edges[edge_t[0], edge_t[1], 0]['control'][index][2]:
-                                            bts.edges[edge_t[0], edge_t[1], 0]['control'][index] = (event_t, start_t, end_t)
-                                        # print(233)
-                                        # 否则加入该控制
-                                    # 这里不能允许新加入，新加入的就不是一个控制了
-                                    '''
-                                    else:
-                                        event_t = list(sc_timed_t)[0]
-                                        start_t = list(sc_timed_t)[1]
-                                        if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
-                                            end_t = float("inf")
-                                        else:
-                                            end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
-                                        bts.edges[edge_t[0], edge_t[1], 0]['control'].append((event_t, start_t, end_t))
-                                        event_last_list.append(event_t)
-                                        #print(466)
-                                    '''
-
-                    else:
-                        # 这一段都是为了再算边的信息, add_edge这里才决定了根节点
-                        sc_duration = []
                         for sc_timed_t in supervisior_curr:
                             event_t = list(sc_timed_t)[0]
-                            start_t = list(sc_timed_t)[1]
-                            if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
-                                end_t = float("inf")
-                            else:
-                                end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
-                            sc_duration.append((event_t, start_t, end_t))
+                            for sc_timed_last in sc_last:
+                                event_last = list(sc_timed_last)[0]
 
-                        root_state = current_state                  # 如果点找不到，就是一定连接当前y_state的
-                        event_tz = get_policy_dict(z_state)
-                        t_max_t = copy.deepcopy(event_tz)
-                        for _iter in t_max_t.keys():
-                            t_max_t[_iter] = -1                     # 初始化，求最大时间
+                                # 如果这一个控制是存在的，那么则更新，扩大其时间区间
+                                if event_t in event_last_list and event_t != event_last:
+                                    continue
+                                elif event_t in event_last_list and event_t == event_last:
+                                    index = event_last_list.index(event_last)
 
-                        for state_t in bts.nodes():                 # 找到 decision中，满足如下条件的点：1 事件完全相符 2 事件对应使能时间都比z_state小 3 满足1、2中，每箱使能时间对应最长
-                            if not state_type(state_t) == 'Z_state':
-                                continue
-                            event_t  = get_policy_dict(state_t)
-                            if event_t.keys() == event_tz.keys():           # 1 事件完全相符
-                                iter_num = 0
-                                for _iter in event_t.keys():
-                                    if event_t[_iter] <= event_tz[_iter]:   # 2 所有事件对应使能时间都比z_state小
-                                        iter_num += 1
-                                if iter_num == event_t.__len__():
+                                    start_t = bts.edges[edge_t[0], edge_t[1], 0]['control'][index][1]
+                                    if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
+                                        end_t = float("inf")
+                                    else:
+                                        end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
+                                    if end_t > bts.edges[edge_t[0], edge_t[1], 0]['control'][index][2]:
+                                        bts.edges[edge_t[0], edge_t[1], 0]['control'][index] = (event_t, start_t, end_t)
+                                    # print(233)
+                                    # 否则加入该控制
+                                # 这里不能允许新加入，新加入的就不是一个控制了
+                                '''
+                                else:
+                                    event_t = list(sc_timed_t)[0]
+                                    start_t = list(sc_timed_t)[1]
+                                    if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
+                                        end_t = float("inf")
+                                    else:
+                                        end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
+                                    bts.edges[edge_t[0], edge_t[1], 0]['control'].append((event_t, start_t, end_t))
+                                    event_last_list.append(event_t)
+                                    #print(466)
+                                '''
+                #elif is_state_listed and not is_state_listed_in_this_y:     # 如果这个点对于当前y来说是全新的
+                #    print(4666)
+                #    pass
+                else:
+                    # 这一段都是为了再算边的信息, add_edge这里才决定了根节点
+                    sc_duration = []
+                    for sc_timed_t in supervisior_curr:
+                        event_t = list(sc_timed_t)[0]
+                        start_t = list(sc_timed_t)[1]
+                        if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
+                            end_t = float("inf")
+                        else:
+                            end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
+                        sc_duration.append((event_t, start_t, end_t))
+
+                    root_state = current_state                  # 如果点找不到，就是一定连接当前y_state的
+                    event_tz = get_policy_dict(z_state)
+                    t_max_t = copy.deepcopy(event_tz)
+                    for _iter in t_max_t.keys():
+                        t_max_t[_iter] = -1                     # 初始化，求最大时间
+
+                    for state_t in bts.nodes():                 # 找到 decision中，满足如下条件的点：1 事件完全相符 2 事件对应使能时间都比z_state小 3 满足1、2中，每箱使能时间对应最长
+                        if not state_type(state_t) == 'Z_state':
+                            continue
+                        event_t  = get_policy_dict(state_t)
+                        if event_t.keys() == event_tz.keys():           # 1 事件完全相符
+                            iter_num = 0
+                            for _iter in event_t.keys():
+                                if event_t[_iter] <= event_tz[_iter]:   # 2 所有事件对应使能时间都比z_state小
+                                    iter_num += 1
+                            if iter_num == event_t.__len__():
+                                try:
                                     #print(event_t, '\t', event_tz)
-                                    root_state = state_t
-                                    for _iter in event_t.keys():
-                                        t_max_t[_iter] = event_t[_iter]     # 3 满足1、2中，每箱使能时间对应最长
+                                    if nx.dijkstra_path_length(bts, current_state, state_t) >= 0:   # 4 要求：找到的点和当前要增加的点都必须是在当前同一y状态之下
+                                        root_state = state_t
+                                        for _iter in event_t.keys():
+                                            t_max_t[_iter] = event_t[_iter]     # 3 满足1、2中，每箱使能时间对应最长
+                                except:
+                                    pass
 
-                        # 增加点
+                    # 增加点
+                    if not is_state_listed:
                         bts.add_node(z_state)
-                        # 增加边
-                        bts.add_edge(root_state, z_state, control=sc_duration)
-                        # 这里是将边，当前点，与根节点相连
-                        #bts.add_edge(last_state, z_state, control=sc_duration)
+                    # 增加边
+                    bts.add_edge(root_state, z_state, control=sc_duration)
+                    # 这里是将边，当前点，与根节点相连
+                    #bts.add_edge(last_state, z_state, control=sc_duration)
 
-                        # ITERATION
-                        #last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
+                    # ITERATION
+                    #last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
 
-                except KeyError:
-                    pass
 
             '''
             for current_node in current_state:
@@ -410,7 +428,8 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                 y_state_t.sort()
                 y_state_t = tuple(y_state_t)
 
-                if y_state_t.__len__() > 0 and y_state_t not in visited:
+                #if y_state_t.__len__() > 0 and y_state_t not in visited:                          ## Critical: 6->o2->6？
+                if y_state_t.__len__() > 0:
                     visited.append(y_state_t)
                     visited.append(state_t)
 
@@ -433,8 +452,16 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
         # 同时计算Y state
         # 如果没有Y State则停止迭代
 
-
     return bts
+
+def assign_node_colors(bts):
+    values = []
+    for node_t in bts.nodes():
+        if state_type(node_t) == 'Z_state':
+            values.append('#FE4365')                # https://www.icoa.cn/a/512.html
+        else:
+            values.append('#83AF9B')                # https://www.sioe.cn/yingyong/yanse-rgb-16/
+    return values
 
 def main():
     fin = open('./IWA_1.yaml', 'r', encoding='utf-8')
@@ -455,7 +482,7 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    bts = t_aic_onestep(iwa, ['0', '6'], event_uo, event_o, event_c, event_uc)
+    bts = t_aic_onestep(iwa, ['0'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
         Plotting
@@ -484,8 +511,14 @@ def main():
         labels.update({edge_t : str('[' + str(min_t) + ', ' + str(max_t) + ']')})
     nx.draw_networkx_edge_labels(dfs_tree, pos, edge_labels=labels, font_color="c")  # 显示权值
     '''
-    nx.draw(bts, pos=nx.spectral_layout(bts), with_labels=True, font_size=6.5) # https://www.jianshu.com/p/e254cd6acfdc/
-                                                                          # https://blog.csdn.net/HsinglukLiu/article/details/107821649
+    node_color = assign_node_colors(bts)
+
+    pos = nx.random_layout(bts)   # nx.spectral_layout(bts)
+    nx.draw(bts, pos=pos, with_labels=True, node_color=node_color, font_size=8.5)                        # https://www.jianshu.com/p/e254cd6acfdc/
+                                                                                                         # https://blog.csdn.net/HsinglukLiu/article/details/107821649
+                                                                                                         # https://www.cnpython.com/qa/39393
+
+    nx.draw_networkx_edge_labels(bts, pos, font_size=4.5)                                                # https://blog.csdn.net/u013576018/article/details/60871485
 
     plt.show()
 
