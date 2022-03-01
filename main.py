@@ -265,7 +265,7 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                 ur = []
                 ur_new = []
 
-                if current_state == ('5', '8') and supervisior_curr == [('a', 4), ('uc', 1)]:
+                if current_state == ('6',):
                     print(233)
 
                 for current_node in current_state:
@@ -282,9 +282,13 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                         ur = list(set(ur))
                         ur.sort()
                     except KeyError:
+                        #ur.append(current_node)                                                         ## 5(Y)->5(Z)->5(Y)
                         pass
 
-                z_state = (tuple(ur), tuple(supervisior_curr))
+                if ur.__len__() == 0:
+                    z_state = (tuple(current_state), tuple(supervisior_curr))
+                else:
+                    z_state = (tuple(ur), tuple(supervisior_curr))
                 if z_state == ((), ()):
                     continue
 
@@ -482,7 +486,7 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    bts = t_aic_onestep(iwa, ['0'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
+    bts = t_aic_onestep(iwa, ['6'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
         Plotting
@@ -513,7 +517,7 @@ def main():
     '''
     node_color = assign_node_colors(bts)
 
-    pos = nx.random_layout(bts)   # nx.spectral_layout(bts)
+    pos = nx.shell_layout(bts)   # nx.spectral_layout(bts)
     nx.draw(bts, pos=pos, with_labels=True, node_color=node_color, font_size=8.5)                        # https://www.jianshu.com/p/e254cd6acfdc/
                                                                                                          # https://blog.csdn.net/HsinglukLiu/article/details/107821649
                                                                                                          # https://www.cnpython.com/qa/39393
