@@ -416,38 +416,47 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                     for edge_t in iwa.out_edges(node_t, data=True):
                         if edge_t[2]['event'] in event_o and edge_t[2]['event'] not in event_c:
                             if edge_t[1] not in y_state_t:
-                                y_state_t.append(edge_t[1])                                             ## 时间要算过
+                                y_state_t = tuple(edge_t[1])
+
+                                visited.append(y_state_t)
+                                visited.append(state_t)
+
+                                if y_state_t not in y_stack:
+                                    y_stack.append(y_state_t)
+
+                                if y_state_t not in bts.nodes():
+                                    state_to_add.append(y_state_t)
+
+                                #t_min =  nx.shortest_path_length(iwa, node_t, edge_t[1], weight='t_min') +  edge_t[2]['t_min']  # 避免计算结果为0，比如从6→6
+                                #t_max = -nx.shortest_path_length(iwa, node_t, edge_t[1], weight='t_max') + edge_t[2]['t_max']  # 其实start→end是必经边，这个信息其实很关键
+                                edge_to_add.append((state_t, y_state_t, (edge_t[2]['event'], edge_t[2]['t_min'], edge_t[2]['t_max'])))
 
                         elif edge_t[2]['event'] in event_o and edge_t[2]['event'] in event_c:
                             if edge_t[2]['event'] in get_policy_event(state_t):
                                 if edge_t[1] not in y_state_t:
-                                    y_state_t.append(edge_t[1])                                         ##
+                                    #y_state_t.append(edge_t[1])                                         ##
+                                    #y_state_t = tuple(y_state_t)
+                                    y_state_t = tuple(edge_t[1])
 
-                y_state_t = list(set(y_state_t))
-                y_state_t.sort()
-                y_state_t = tuple(y_state_t)
+                                    visited.append(y_state_t)
+                                    visited.append(state_t)
 
-                #if y_state_t.__len__() > 0 and y_state_t not in visited:                          ## Critical: 6->o2->6？
-                if y_state_t.__len__() > 0:
-                    visited.append(y_state_t)
-                    visited.append(state_t)
+                                    if y_state_t not in y_stack:
+                                        y_stack.append(y_state_t)
 
-                    y_stack.append(y_state_t)
-                    state_to_add.append(y_state_t)
-                    edge_to_add.append([state_t, y_state_t])                                      ## 这里edge的数据不知道
+                                    if y_state_t not in bts.nodes():
+                                        state_to_add.append(y_state_t)
+                                    edge_to_add.append((state_t, y_state_t, (edge_t[2]['event'], edge_t[2]['t_min'], edge_t[2]['t_max'])))
 
-        for index in range(0, state_to_add.__len__()):
+
+        for index in range(0, state_to_add.__len__()):      # dictionary changed size during iteration
             try:
-                if state_to_add[index] not in bts.nodes():
-                    bts.add_node(state_to_add[index])
-                bts.add_edge(edge_to_add[index][0], edge_to_add[index][1])
+                bts.add_node(state_to_add[index])
             except:
                 pass
+        for index in range(0, edge_to_add.__len__()):      # dictionary changed size during iteration
+            bts.add_edge(edge_to_add[index][0], edge_to_add[index][1], observtion=edge_to_add[index][2])
 
-        # 下一步
-        # 验证UR的求解
-        # 同时计算Y state
-        # 如果没有Y State则停止迭代
 
     return bts
 

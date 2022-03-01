@@ -259,13 +259,14 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                                                     # https://blog.csdn.net/liuqiang3/article/details/99707294
             sc_set = [list(_iter) for _iter in sc_set]              # tuple -> list
                                                                     # 而且最后拿到的数据是排序排好的，这里就不用考虑连接问题
+            sc_set.sort()                                           # Critical
 
             #last_state = current_state
             for supervisior_curr in sc_set:
                 ur = []
                 ur_new = []
 
-                if current_state == ('5', '8') and supervisior_curr == [('a', 4), ('uc', 1)]:
+                if ('b', 9) in supervisior_curr:    # current_state == ('6',)
                     print(233)
 
                 for current_node in current_state:
@@ -282,9 +283,13 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                         ur = list(set(ur))
                         ur.sort()
                     except KeyError:
+                        #ur.append(current_node)                                                         ## 5(Y)->5(Z)->5(Y)
                         pass
 
-                z_state = (tuple(ur), tuple(supervisior_curr))
+                if ur.__len__() == 0:
+                    z_state = (tuple(current_state), tuple(supervisior_curr))
+                else:
+                    z_state = (tuple(ur), tuple(supervisior_curr))
                 if z_state == ((), ()):
                     continue
 
@@ -334,7 +339,6 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                         end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
                                     if end_t > bts.edges[edge_t[0], edge_t[1], 0]['control'][index][2]:
                                         bts.edges[edge_t[0], edge_t[1], 0]['control'][index] = (event_t, start_t, end_t)
-                                    # print(233)
                                     # 否则加入该控制
                                 # 这里不能允许新加入，新加入的就不是一个控制了
                                 '''
@@ -401,11 +405,6 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                     #last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
 
 
-            '''
-            for current_node in current_state:
-                print(233)
-            '''
-
         # 求NX
         state_to_add = []
         edge_to_add  = []
@@ -424,6 +423,9 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                 if edge_t[1] not in y_state_t:
                                     y_state_t.append(edge_t[1])                                         ##
 
+                if y_state_t.__len__() >= 0:
+                    print(466)
+
                 y_state_t = list(set(y_state_t))
                 y_state_t.sort()
                 y_state_t = tuple(y_state_t)
@@ -436,8 +438,6 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                     y_stack.append(y_state_t)
                     state_to_add.append(y_state_t)
                     edge_to_add.append([state_t, y_state_t])                                      ## 这里edge的数据不知道
-
-        print(y_stack, state_to_add, len(bts.nodes()))
 
         for index in range(0, state_to_add.__len__()):
             try:
@@ -511,10 +511,10 @@ def main():
         labels.update({edge_t : str('[' + str(min_t) + ', ' + str(max_t) + ']')})
     nx.draw_networkx_edge_labels(dfs_tree, pos, edge_labels=labels, font_color="c")  # 显示权值
     '''
-    node_colors = assign_node_colors(bts)
+    node_color = assign_node_colors(bts)
 
-    pos = nx.spectral_layout(bts)
-    nx.draw(bts, pos=pos, with_labels=True, node_colors=node_colors, font_size=8.5)                      # https://www.jianshu.com/p/e254cd6acfdc/
+    pos = nx.shell_layout(bts)   # nx.spectral_layout(bts)
+    nx.draw(bts, pos=pos, with_labels=True, node_color=node_color, font_size=8.5)                        # https://www.jianshu.com/p/e254cd6acfdc/
                                                                                                          # https://blog.csdn.net/HsinglukLiu/article/details/107821649
                                                                                                          # https://www.cnpython.com/qa/39393
 
