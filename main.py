@@ -427,9 +427,20 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                 if y_state_t not in bts.nodes():
                                     state_to_add.append(y_state_t)
 
-                                #t_min =  nx.shortest_path_length(iwa, node_t, edge_t[1], weight='t_min') +  edge_t[2]['t_min']  # 避免计算结果为0，比如从6→6
-                                #t_max = -nx.shortest_path_length(iwa, node_t, edge_t[1], weight='t_max') + edge_t[2]['t_max']  # 其实start→end是必经边，这个信息其实很关键
-                                edge_to_add.append((state_t, y_state_t, (edge_t[2]['event'], edge_t[2]['t_min'], edge_t[2]['t_max'])))
+                                t_min = 1e6
+                                t_max = -1
+                                for node_s in current_state:
+                                    try:
+                                        t_min_t = nx.shortest_path_length(iwa, node_s, node_t, weight='t_min') + edge_t[2]['t_min']
+                                        if t_min_t < t_min:
+                                            t_min = t_min_t
+                                        t_max_t = nx.shortest_path_length(iwa, node_s, node_t, weight='t_max') + edge_t[2]['t_max']
+                                        if t_max_t > t_max:
+                                            t_max = t_max_t
+                                    except:
+                                        pass
+
+                                edge_to_add.append((state_t, y_state_t, (edge_t[2]['event'], t_min, t_max)))
 
                         elif edge_t[2]['event'] in event_o and edge_t[2]['event'] in event_c:
                             if edge_t[2]['event'] in get_policy_event(state_t):
@@ -446,7 +457,21 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
 
                                     if y_state_t not in bts.nodes():
                                         state_to_add.append(y_state_t)
-                                    edge_to_add.append((state_t, y_state_t, (edge_t[2]['event'], edge_t[2]['t_min'], edge_t[2]['t_max'])))
+
+                                    t_min = 1e6
+                                    t_max = -1
+                                    for node_s in current_state:
+                                        try:
+                                            t_min_t = nx.shortest_path_length(iwa, node_s, node_t, weight='t_min') + edge_t[2]['t_min']
+                                            if t_min_t < t_min:
+                                                t_min = t_min_t
+                                            t_max_t = nx.shortest_path_length(iwa, node_s, node_t, weight='t_max') + edge_t[2]['t_max']
+                                            if t_max_t > t_max:
+                                                t_max = t_max_t
+                                        except:
+                                            pass
+
+                                    edge_to_add.append((state_t, y_state_t, (edge_t[2]['event'], t_min, t_max)))
 
 
         for index in range(0, state_to_add.__len__()):      # dictionary changed size during iteration
