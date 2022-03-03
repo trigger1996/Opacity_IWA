@@ -427,14 +427,25 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                 if y_state_t not in bts.nodes():
                                     state_to_add.append(y_state_t)
 
-                                t_min = 1e6
+                                t_min = 1e6  # 这也是个min-max结构，对每一个y状态求解y->z->y的最短路径
                                 t_max = -1
+                                G0 = nx.MultiDiGraph()
+                                for edge_g in iwa.edges():
+                                    start = list(edge_g)[0]
+                                    end = list(edge_g)[1]
+                                    try:
+                                        event = iwa.edges[start, end, 0]['event']
+                                        t_min = iwa.edges[start, end, 0]['t_min']
+                                        t_max = -iwa.edges[start, end, 0]['t_max']  # 用负值，得到的最短距离就是最长距离
+                                        G0.add_edge(start, end, event=event, t_min=t_min, t_max=t_max)
+                                    except:
+                                        pass
                                 for node_s in current_state:
                                     try:
-                                        t_min_t = nx.shortest_path_length(iwa, node_s, node_t, weight='t_min') + edge_t[2]['t_min']
+                                        t_min_t =  nx.shortest_path_length(G0, node_s, node_t, weight='t_min') + edge_t[2]['t_min']
                                         if t_min_t < t_min:
                                             t_min = t_min_t
-                                        t_max_t = nx.shortest_path_length(iwa, node_s, node_t, weight='t_max') + edge_t[2]['t_max']
+                                        t_max_t = -nx.shortest_path_length(G0, node_s, node_t, weight='t_max') + edge_t[2]['t_max']
                                         if t_max_t > t_max:
                                             t_max = t_max_t
                                     except:
@@ -458,14 +469,27 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                                     if y_state_t not in bts.nodes():
                                         state_to_add.append(y_state_t)
 
-                                    t_min = 1e6
+                                    t_min = 1e6  # 这也是个min-max结构，对每一个y状态求解y->z->y的最短路径
                                     t_max = -1
+                                    G0 = nx.MultiDiGraph()
+                                    for edge_g in iwa.edges():
+                                        start = list(edge_g)[0]
+                                        end = list(edge_g)[1]
+                                        try:
+                                            event = iwa.edges[start, end, 0]['event']
+                                            t_min = iwa.edges[start, end, 0]['t_min']
+                                            t_max = -iwa.edges[start, end, 0]['t_max']  # 用负值，得到的最短距离就是最长距离
+                                            G0.add_edge(start, end, event=event, t_min=t_min, t_max=t_max)
+                                        except:
+                                            pass
                                     for node_s in current_state:
                                         try:
-                                            t_min_t = nx.shortest_path_length(iwa, node_s, node_t, weight='t_min') + edge_t[2]['t_min']
+                                            t_min_t = nx.shortest_path_length(G0, node_s, node_t, weight='t_min') + \
+                                                      edge_t[2]['t_min']
                                             if t_min_t < t_min:
                                                 t_min = t_min_t
-                                            t_max_t = nx.shortest_path_length(iwa, node_s, node_t, weight='t_max') + edge_t[2]['t_max']
+                                            t_max_t = -nx.shortest_path_length(G0, node_s, node_t, weight='t_max') + \
+                                                      edge_t[2]['t_max']
                                             if t_max_t > t_max:
                                                 t_max = t_max_t
                                         except:
@@ -513,7 +537,7 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    bts = t_aic_onestep(iwa, ['6'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
+    bts = t_aic_onestep(iwa, ['8'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
         Plotting
