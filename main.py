@@ -178,7 +178,7 @@ def get_policy_dict(state):
     return policy
 
 
-def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
+def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
     # 把初始点设置为Y state
     bts = nx.MultiDiGraph()
     bts.add_node(tuple(source))
@@ -266,8 +266,8 @@ def t_aic_onestep(iwa, source, event_uo, event_o, event_c, event_uc):
                 ur = []
                 ur_new = []
 
-                if ('b', 9) in supervisior_curr:    # current_state == ('6',)
-                    print(233)
+                #if ('b', 9) in supervisior_curr:    # current_state == ('6',)
+                #    print(233)
 
                 for current_node in current_state:
                     try:
@@ -537,7 +537,7 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    bts = t_aic_onestep(iwa, ['8'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
+    bts = t_aic(iwa, ['6'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
         Plotting
