@@ -5,6 +5,8 @@ import yaml
 import copy
 import matplotlib.pyplot as plt # 导入 Matplotlib 工具包
 from itertools import combinations, product
+from heapq import heappush, heappop
+from itertools import count
 
 # https://blog.csdn.net/u010330109/article/details/89525729
 # 它这个思路是求所有不连通的子图，那么可以吧\Sigma_o当成断开的进行求解即可，求完加上去
@@ -171,12 +173,44 @@ def get_policy_event(state):
         policy_events.append(policy_t[0])
     return policy_events
 
-def get_policy_dict(state):
+def get_policy_t_min(state):
     policy = {}
     for policy_t in state[1]:       ## 后面要改成state[2]
         policy.update({policy_t[0] : policy_t[1]})
     return policy
+def get_policy_duration(state):
+    policy = {}
+    for policy_t in state[1]:       ## 后面要改成state[2]
+        policy.update({policy_t[0] : (policy_t[1], policy_t[2])})
+    return policy
 
+def get_min_max_time_from_y(iwa, y_state, current_node):
+    t_min = 1e6  # 这也是个min-max结构，对每一个y状态求解y->z->y的最短路径
+    t_max = -1
+    G0 = nx.MultiDiGraph()
+    for edge_g in iwa.edges():
+        start = list(edge_g)[0]
+        end = list(edge_g)[1]
+        try:
+            event = iwa.edges[start, end, 0]['event']
+            t_min = iwa.edges[start, end, 0]['t_min']
+            t_max = -iwa.edges[start, end, 0]['t_max']  # 用负值，得到的最短距离就是最长距离
+            G0.add_edge(start, end, event=event, t_min=t_min, t_max=t_max)
+        except:
+            pass
+
+    for node_s in y_state:
+        try:
+            t_min_t = nx.shortest_path_length(G0, node_s, current_node, weight='t_min', method='bellman-ford')
+            if t_min_t < t_min:
+                t_min = t_min_t
+            t_max_t = -nx.shortest_path_length(G0, node_s, current_node, weight='t_max', method='bellman-ford')     ## 现在是这个搞不定
+            if t_max_t > t_max:
+                t_max = t_max_t
+        except:
+            pass
+
+    return [t_min, t_max]
 
 def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
     # 把初始点设置为Y state
@@ -369,7 +403,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                         sc_duration.append((event_t, start_t, end_t))
 
                     root_state = current_state                  # 如果点找不到，就是一定连接当前y_state的
-                    event_tz = get_policy_dict(z_state)
+                    event_tz = get_policy_t_min(z_state)
                     t_max_t = copy.deepcopy(event_tz)
                     for _iter in t_max_t.keys():
                         t_max_t[_iter] = -1                     # 初始化，求最大时间
@@ -377,7 +411,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     for state_t in bts.nodes():                 # 找到 decision中，满足如下条件的点：1 事件完全相符 2 事件对应使能时间都比z_state小 3 满足1、2中，每箱使能时间对应最长
                         if not state_type(state_t) == 'Z_state':
                             continue
-                        event_t  = get_policy_dict(state_t)
+                        event_t  = get_policy_t_min(state_t)
                         if event_t.keys() == event_tz.keys():           # 1 事件完全相符
                             iter_num = 0
                             for _iter in event_t.keys():
@@ -395,6 +429,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
 
                     # 增加点
                     if not is_state_listed:
+                        z_state = (z_state[0], tuple(sc_duration))
                         bts.add_node(z_state)
                     # 增加边
                     bts.add_edge(root_state, z_state, control=sc_duration)
@@ -406,97 +441,99 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
 
 
         # 求NX
+        # 现有思路：  针对每一个Z状态，求下一状态
+        #           发现一个接一个，直接接在当前遍历的Z状态上
+        #           问题就出在这边 发现一个接一个 ，这样得到的状态必然是分散的
+        # 解决思路：
         state_to_add = []
         edge_to_add  = []
         for state_t in bts.nodes():
             # 对所有z_states 求NX
             if state_t not in visited and state_type(state_t) == 'Z_state':
-                y_state_t = []
+                y_state_w_observations = []     # 同时存放事件和
+
+                # 这边我是希望得到所有事件相同的点，最后再一起处理
                 for node_t in state_t[0]:
                     for edge_t in iwa.out_edges(node_t, data=True):
-                        if edge_t[2]['event'] in event_o and edge_t[2]['event'] not in event_c:
-                            if edge_t[1] not in y_state_t:
-                                y_state_t = tuple(edge_t[1])
+                        if edge_t[2]['event'] in event_o:     # 如果存在可到达的事件
 
-                                visited.append(y_state_t)
-                                visited.append(state_t)
+                            for current_node in current_state:
+                                dfs_tree = dfs_events(iwa, get_policy_event(state_t), current_node)
+                                if not (node_t in dfs_tree.nodes() or current_node in dfs_tree.nodes()):
+                                    continue
 
-                                if y_state_t not in y_stack:
-                                    y_stack.append(y_state_t)
+                                feasible_path = list(nx.all_simple_paths(dfs_tree, current_node, node_t))
+                                if feasible_path.__len__() == 0:                                            # 如果没有可达路径，则重新查找，怎么可能没有可达路径
+                                    continue
 
-                                if y_state_t not in bts.nodes():
-                                    state_to_add.append(y_state_t)
-
-                                t_min = 1e6  # 这也是个min-max结构，对每一个y状态求解y->z->y的最短路径
+                                t_min = 1e6
                                 t_max = -1
-                                G0 = nx.MultiDiGraph()
-                                for edge_g in iwa.edges():
-                                    start = list(edge_g)[0]
-                                    end = list(edge_g)[1]
-                                    try:
-                                        event = iwa.edges[start, end, 0]['event']
-                                        t_min = iwa.edges[start, end, 0]['t_min']
-                                        t_max = -iwa.edges[start, end, 0]['t_max']  # 用负值，得到的最短距离就是最长距离
-                                        G0.add_edge(start, end, event=event, t_min=t_min, t_max=t_max)
-                                    except:
-                                        pass
-                                for node_s in current_state:
-                                    try:
-                                        t_min_t =  nx.shortest_path_length(G0, node_s, node_t, weight='t_min') + edge_t[2]['t_min']
-                                        if t_min_t < t_min:
-                                            t_min = t_min_t
-                                        t_max_t = -nx.shortest_path_length(G0, node_s, node_t, weight='t_max') + edge_t[2]['t_max']
-                                        if t_max_t > t_max:
-                                            t_max = t_max_t
-                                    except:
-                                        pass
+                                for path_t in feasible_path:
+                                    last_node = path_t[path_t.__len__() - 2]
+                                    t_min_t = dfs_tree.edges[last_node, node_t, 0]['t_min']                 # 因为dfs_tree里面会算好累加长度，所以这里只需调用
+                                    t_max_t = dfs_tree.edges[last_node, node_t, 0]['t_max']
+                                    if t_min_t < t_min:
+                                        t_min = t_min_t
+                                    if t_max_t > t_max:
+                                        t_max = t_max_t
 
-                                edge_to_add.append((state_t, y_state_t, (edge_t[2]['event'], t_min, t_max)))
+                                if edge_t[2]['event'] not in event_c or \
+                                   (edge_t[2]['event'] in event_c and edge_t[2]['event'] in get_policy_event(state_t) and \
+                                        get_policy_duration(state_t)[edge_t[2]['event']][0] >= t_min + edge_t[2]['t_min']):     # 可观不可控，或：可观可控且被使能，且使能时间大于当前结点的最小时间
+                                                                                                                                # 对可观可控事件，要求当前事件的使能最小时间要大于当前的最小观测时间
+                                    # TODO：求解此处min-max时间
+                                    t_min += edge_t[2]['t_min']
+                                    t_max += edge_t[2]['t_max']
 
-                        elif edge_t[2]['event'] in event_o and edge_t[2]['event'] in event_c:
-                            if edge_t[2]['event'] in get_policy_event(state_t):
-                                if edge_t[1] not in y_state_t:
-                                    #y_state_t.append(edge_t[1])                                         ##
-                                    #y_state_t = tuple(y_state_t)
-                                    y_state_t = tuple(edge_t[1])
+                                    y_state_w_observations.append((state_t, edge_t[0], edge_t[1], (edge_t[2]['event'], t_min, t_max)))      # 当前状态，当前状态中出发点，当前状态可达点，事件以及花的时间
 
-                                    visited.append(y_state_t)
-                                    visited.append(state_t)
+                if y_state_w_observations.__len__():
 
-                                    if y_state_t not in y_stack:
-                                        y_stack.append(y_state_t)
+                    # 整理每一步得到的y_state
+                    # Step 1: 取出所有事件和对应时间，做timeslice
+                    nx_timeslice = {}
+                    for y_t in y_state_w_observations:
+                        if y_t[3][0] not in nx_timeslice.keys():            # y_t[3][0] 当前可观事件的事件名，如果当前可观事件未被记录
+                            nx_timeslice.update({y_t[3][0]: [y_t[3][1], y_t[3][2]]})
+                        else:
+                            nx_timeslice[y_t[3][0]].append(y_t[3][1])
+                            nx_timeslice[y_t[3][0]].append(y_t[3][2])
 
-                                    if y_state_t not in bts.nodes():
-                                        state_to_add.append(y_state_t)
+                        nx_timeslice.update({y_t[3][0]: list(set(nx_timeslice[y_t[3][0]]))})        # 去除相同项
+                        nx_timeslice[y_t[3][0]].sort()                                              # 排序
 
-                                    t_min = 1e6  # 这也是个min-max结构，对每一个y状态求解y->z->y的最短路径
-                                    t_max = -1
-                                    G0 = nx.MultiDiGraph()
-                                    for edge_g in iwa.edges():
-                                        start = list(edge_g)[0]
-                                        end = list(edge_g)[1]
-                                        try:
-                                            event = iwa.edges[start, end, 0]['event']
-                                            t_min = iwa.edges[start, end, 0]['t_min']
-                                            t_max = -iwa.edges[start, end, 0]['t_max']  # 用负值，得到的最短距离就是最长距离
-                                            G0.add_edge(start, end, event=event, t_min=t_min, t_max=t_max)
-                                        except:
-                                            pass
-                                    for node_s in current_state:
-                                        try:
-                                            t_min_t = nx.shortest_path_length(G0, node_s, node_t, weight='t_min') + \
-                                                      edge_t[2]['t_min']
-                                            if t_min_t < t_min:
-                                                t_min = t_min_t
-                                            t_max_t = -nx.shortest_path_length(G0, node_s, node_t, weight='t_max') + \
-                                                      edge_t[2]['t_max']
-                                            if t_max_t > t_max:
-                                                t_max = t_max_t
-                                        except:
-                                            pass
+                    # Step 2: 对每一时间段，求解当前的可达点
+                    for event_t in nx_timeslice:
+                        for i in range(0, nx_timeslice[event_t].__len__() - 1):
+                            t1 = nx_timeslice[event_t][i]                                                   # 取出相邻的时间
+                            t2 = nx_timeslice[event_t][i + 1]
 
-                                    edge_to_add.append((state_t, y_state_t, (edge_t[2]['event'], t_min, t_max)))
+                            state_to_add_t = []
+                            for y_t in y_state_w_observations:
+                                if y_t[3][0] == event_t and (y_t[3][1] <= t1 and y_t[3][2] >= t2):          # 当前遍历到的observation事件相等
+                                    if y_t[2] not in state_to_add_t:
+                                        state_to_add_t.append(y_t[2])                                       # 把可达点加入
 
+                            if tuple(state_to_add_t) not in state_to_add:                                   # 对于当前事件event_t和t1, t2，所有可达点组成新的y状态
+                                state_to_add.append(tuple(state_to_add_t))                                  # 如果该状态之前没被考虑过，加入
+
+                            if t1 == 13 and t2 == 16:
+                                print(233)
+
+                            is_edge_added = False
+                            index_ea = None
+                            for edge_to_add_t in edge_to_add:
+                                if edge_to_add_t[0] == y_t[0] and edge_to_add_t[1] == tuple(state_to_add_t) and \
+                                   event_t == edge_to_add_t[2][0] and \
+                                   (t1 == edge_to_add_t[2][2] or t2 == edge_to_add_t[2][1]):                # 关键，时间一定要相接
+                                    is_edge_added = True
+                                    index_ea = edge_to_add.index(edge_to_add_t)
+                            if not is_edge_added:
+                                edge_to_add.append((y_t[0], tuple(state_to_add_t), (event_t, t1, t2)))      # 如果当前边没有被考虑过，则添加
+                            else:                                                                           # 如果有起点相同，终点相同，且时间相接的边，则合并，例子见下
+                                t1 = min(t1, edge_to_add[index_ea][2][1])                                   # ('o1', 7, 13) ('o1', 13, 16))
+                                t2 = max(t2, edge_to_add[index_ea][2][2])
+                                edge_to_add[index_ea] = (y_t[0], tuple(state_to_add_t), (event_t, t1, t2))
 
         for index in range(0, state_to_add.__len__()):      # dictionary changed size during iteration
             try:
@@ -512,10 +549,12 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
 def assign_node_colors(bts):
     values = []
     for node_t in bts.nodes():
-        if state_type(node_t) == 'Z_state':
+        if node_t == ('init', ):
+            values.append('#DC5712')                # https://www.sioe.cn/yingyong/yanse-rgb-16/
+        elif state_type(node_t) == 'Z_state':
             values.append('#FE4365')                # https://www.icoa.cn/a/512.html
         else:
-            values.append('#83AF9B')                # https://www.sioe.cn/yingyong/yanse-rgb-16/
+            values.append('#83AF9B')
     return values
 
 def main():
@@ -537,7 +576,8 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    bts = t_aic(iwa, ['6'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
+    init_state = ['0', '6']
+    bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
         Plotting
@@ -566,6 +606,7 @@ def main():
         labels.update({edge_t : str('[' + str(min_t) + ', ' + str(max_t) + ']')})
     nx.draw_networkx_edge_labels(dfs_tree, pos, edge_labels=labels, font_color="c")  # 显示权值
     '''
+    bts.add_edge(('init', ), tuple(init_state))
     node_color = assign_node_colors(bts)
 
     pos = nx.shell_layout(bts)   # nx.spectral_layout(bts)

@@ -505,20 +505,35 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     # Step 2: 对每一时间段，求解当前的可达点
                     for event_t in nx_timeslice:
                         for i in range(0, nx_timeslice[event_t].__len__() - 1):
-                            t1 = nx_timeslice[event_t][i]                                           # 取出相邻的时间
+                            t1 = nx_timeslice[event_t][i]                                                   # 取出相邻的时间
                             t2 = nx_timeslice[event_t][i + 1]
 
                             state_to_add_t = []
                             for y_t in y_state_w_observations:
-                                if y_t[3][0] == event_t and (y_t[3][1] <= t1 and y_t[3][2] >= t2):     # 当前遍历到的observation事件相等
+                                if y_t[3][0] == event_t and (y_t[3][1] <= t1 and y_t[3][2] >= t2):          # 当前遍历到的observation事件相等
                                     if y_t[2] not in state_to_add_t:
-                                        state_to_add_t.append(y_t[2])                                      # 把可达点加入
+                                        state_to_add_t.append(y_t[2])                                       # 把可达点加入
 
-                            if tuple(state_to_add_t) not in state_to_add:
-                                state_to_add.append(tuple(state_to_add_t))
-                            edge_to_add.append((y_t[0], tuple(state_to_add_t), (event_t, t1, t2)))          ## ('o1', 7, 13) ('o1', 13, 16))
+                            if tuple(state_to_add_t) not in state_to_add:                                   # 对于当前事件event_t和t1, t2，所有可达点组成新的y状态
+                                state_to_add.append(tuple(state_to_add_t))                                  # 如果该状态之前没被考虑过，加入
 
-                    print(2333)
+                            if t1 == 13 and t2 == 16:
+                                print(233)
+
+                            is_edge_added = False
+                            index_ea = None
+                            for edge_to_add_t in edge_to_add:
+                                if edge_to_add_t[0] == y_t[0] and edge_to_add_t[1] == tuple(state_to_add_t) and \
+                                   event_t == edge_to_add_t[2][0] and \
+                                   (t1 == edge_to_add_t[2][2] or t2 == edge_to_add_t[2][1]):                # 关键，时间一定要相接
+                                    is_edge_added = True
+                                    index_ea = edge_to_add.index(edge_to_add_t)
+                            if not is_edge_added:
+                                edge_to_add.append((y_t[0], tuple(state_to_add_t), (event_t, t1, t2)))      # 如果当前边没有被考虑过，则添加
+                            else:                                                                           # 如果有起点相同，终点相同，且时间相接的边，则合并，例子见下
+                                t1 = min(t1, edge_to_add[index_ea][2][1])                                   # ('o1', 7, 13) ('o1', 13, 16))
+                                t2 = max(t2, edge_to_add[index_ea][2][2])
+                                edge_to_add[index_ea] = (y_t[0], tuple(state_to_add_t), (event_t, t1, t2))
 
         for index in range(0, state_to_add.__len__()):      # dictionary changed size during iteration
             try:
@@ -534,10 +549,12 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
 def assign_node_colors(bts):
     values = []
     for node_t in bts.nodes():
-        if state_type(node_t) == 'Z_state':
+        if node_t == ('init', ):
+            values.append('#DC5712')                # https://www.sioe.cn/yingyong/yanse-rgb-16/
+        elif state_type(node_t) == 'Z_state':
             values.append('#FE4365')                # https://www.icoa.cn/a/512.html
         else:
-            values.append('#83AF9B')                # https://www.sioe.cn/yingyong/yanse-rgb-16/
+            values.append('#83AF9B')
     return values
 
 def main():
@@ -559,7 +576,8 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    bts = t_aic(iwa, ['0', '6'], event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
+    init_state = ['0', '6']
+    bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
         Plotting
@@ -588,6 +606,7 @@ def main():
         labels.update({edge_t : str('[' + str(min_t) + ', ' + str(max_t) + ']')})
     nx.draw_networkx_edge_labels(dfs_tree, pos, edge_labels=labels, font_color="c")  # 显示权值
     '''
+    bts.add_edge(('init', ), tuple(init_state))
     node_color = assign_node_colors(bts)
 
     pos = nx.shell_layout(bts)   # nx.spectral_layout(bts)
