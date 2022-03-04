@@ -384,6 +384,16 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                     else:
                                         end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
                                     if end_t > bts.edges[edge_t[0], edge_t[1], 0]['control'][index][2]:
+
+                                        # 这边是为了建立new_state_t，即更新了点edge_t[1]状态的点
+                                        event_updated_t = list(edge_t[1][1])
+                                        for i in range(0, event_updated_t.__len__()):
+                                            if event_updated_t[i][0] == event_t:
+                                                event_updated_t[i] = (event_t, start_t, end_t)
+                                        new_state_t = (edge_t[1][0], event_updated_t)
+
+                                        
+
                                         bts.edges[edge_t[0], edge_t[1], 0]['control'][index] = (event_t, start_t, end_t)
                                     # 否则加入该控制
                                 # 这里不能允许新加入，新加入的就不是一个控制了
@@ -421,7 +431,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
 
                     # 增加点
                     if not is_state_listed:
-                        bts.add_node(z_state[0], policy=z_state[1])
+                        bts.add_node(z_state)
                     # 增加边
                     bts.add_edge(root_state, z_state, control=sc_duration)
                     # 这里是将边，当前点，与根节点相连
