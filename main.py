@@ -514,8 +514,12 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                     if y_t[2] not in state_to_add_t:
                                         state_to_add_t.append(y_t[2])                                       # 把可达点加入
 
+                            state_to_add_t.sort()                                                           # 排序
                             if tuple(state_to_add_t) not in state_to_add:                                   # 对于当前事件event_t和t1, t2，所有可达点组成新的y状态
                                 state_to_add.append(tuple(state_to_add_t))                                  # 如果该状态之前没被考虑过，加入
+
+                                visited.append(tuple(state_to_add_t))
+                                y_stack.append(tuple(state_to_add_t))
 
                             if t1 == 13 and t2 == 16:
                                 print(233)
@@ -530,6 +534,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                     index_ea = edge_to_add.index(edge_to_add_t)
                             if not is_edge_added:
                                 edge_to_add.append((y_t[0], tuple(state_to_add_t), (event_t, t1, t2)))      # 如果当前边没有被考虑过，则添加
+                                visited.append(y_t[0])
                             else:                                                                           # 如果有起点相同，终点相同，且时间相接的边，则合并，例子见下
                                 t1 = min(t1, edge_to_add[index_ea][2][1])                                   # ('o1', 7, 13) ('o1', 13, 16))
                                 t2 = max(t2, edge_to_add[index_ea][2][2])
@@ -576,7 +581,7 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    init_state = ['0', '6']
+    init_state = ['0']                                                  # ['0', '6'], ['6']
     bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
