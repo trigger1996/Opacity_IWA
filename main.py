@@ -354,6 +354,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                             pass
 
                 if is_state_listed and is_state_listed_in_this_y:  # 如果这个点已经有过
+                    node_to_update = []
                     for edge_t in bts.in_edges(state_t, data=True):
                         # 更新点
                         # bts.remove_node(edge_t[0])
@@ -378,7 +379,10 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                 elif event_t in event_last_list and event_t == event_last:
                                     index = event_last_list.index(event_last)
 
-                                    start_t = bts.edges[edge_t[0], edge_t[1], 0]['control'][index][1]
+                                    try:
+                                        start_t = bts.edges[edge_t[0], edge_t[1], 0]['control'][index][1]
+                                    except:
+                                        pass
                                     if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
                                         end_t = float("inf")
                                     else:
@@ -390,13 +394,24 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                         for i in range(0, event_updated_t.__len__()):
                                             if event_updated_t[i][0] == event_t:
                                                 event_updated_t[i] = (event_t, start_t, end_t)
-                                        new_state_t = (edge_t[1][0], event_updated_t)
+                                        new_state_t = (edge_t[1][0], tuple(event_updated_t))
 
-                                        
-
+                                        node_to_update.append((edge_t[0], edge_t[1], new_state_t))
                                         bts.edges[edge_t[0], edge_t[1], 0]['control'][index] = (event_t, start_t, end_t)
-                                    # 否则加入该控制
-                                # 这里不能允许新加入，新加入的就不是一个控制了
+                                        #nx.relabel_nodes(bts, {edge_t[1] : new_state_t})
+
+
+                    for (old_origin, old_state, new_state) in node_to_update:
+                        # 把edge_t[1]的边都转移到new_state_t上
+                        bts.add_node(new_state)
+                        for edge_t_t in bts.in_edges(old_state, data=True):
+                            bts.add_edge(edge_t_t[0], new_state, control=edge_t_t[2])
+                        for edge_t_t in bts.out_edges(old_state, data=True):
+                            bts.add_edge(new_state, edge_t_t[1], control=edge_t_t[2])
+
+                        bts.remove_node(old_state)
+                        bts.add_edge(old_origin, new_state, control=tuple(event_updated_t))
+                        #bts.edges[edge_t[0], new_state_t, 0]['control'][index] = (event_t, start_t, end_t)
 
                     # elif is_state_listed and not is_state_listed_in_this_y:     # 如果这个点对于当前y来说是全新的
                     #    print(4666)
@@ -440,7 +455,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     # ITERATION
                     # last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
 
-            '''
+
             #last_state = current_state
             for supervisior_curr in sc_set:
                 ur = []
@@ -574,9 +589,6 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     # ITERATION
                     #last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
 
-        '''
-
-        '''
         # 求NX
         # 现有思路：  针对每一个Z状态，求下一状态
         #           发现一个接一个，直接接在当前遍历的Z状态上
@@ -684,7 +696,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 pass
         for index in range(0, edge_to_add.__len__()):      # dictionary changed size during iteration
             bts.add_edge(edge_to_add[index][0], edge_to_add[index][1], observtion=edge_to_add[index][2])
-    '''
+
 
     return bts
 
