@@ -481,37 +481,101 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     #    pass
                 else:
 
-                    root_state = current_state  # 如果点找不到，就是一定连接当前y_state的
+                    root_state = []
                     event_tz = get_policy_t_min(z_state)
+                    event_tz_duration = get_policy_duration(z_state)        # 虽然这样有点蠢, 两个变量一样的
                     t_max_t = copy.deepcopy(event_tz)
+                    state_to_add_t = None
                     for _iter in t_max_t.keys():
-                        t_max_t[_iter] = -1  # 初始化，求最大时间
+                        t_max_t[_iter] = -1             # 初始化，求最大时间
 
-                    for state_t in bts.nodes():  # 找到 decision中，满足如下条件的点：1 事件完全相符 2 事件对应使能时间都比z_state小 3 满足1、2中， 每项使能时间对应最长
+                    # 找到 decision中，满足如下条件的所有点：
+                    # Situation 1
+                    #   1 事件完全相符
+                    #   2 事件对应使能时间都比z_state小
+                    #   3 满足1、2中， 每项使能时间对应最长 4 同一Y状态
+                    #   4 同属于一个Y
+                    # Situation 2
+                    # 对于每一个branch的初始结点：如何判定？如果这个结点是他的初始结点, 则找不到一个时间相同, 且使能时间比他短的结点
+                    #   1 当前点事件于余目标点事件, i.e., \forall \sigma' \in (\sigma', [t_1, t_2)), (\sigma', [t_1, t_2)) in q_z', (\sigma', [t_1, t_2)) \ in q_z
+                    #   2 对应事件事件时间完全相等, q_z' = {(a,[1,2)), (uc,[4,5))} (目标点),       q_z = {(a,[1,2)), (b,[1,7)), (uc,[4,5))}(当前点)
+                    #   3 找到满足条件1、2最小的一个点：注意 {(a,[2,3))}可能会同时连接到{(a,[2,3)), (b,[5,9)}和{(a,[2,3)), (b,[2,5))}
+
+                    for state_t in bts.nodes():
                         if not state_type(state_t) == 'Z_state':
                             continue
+
+                        # Situation 1
                         event_t = get_policy_t_min(state_t)
                         if event_t.keys() == event_tz.keys():  # 1 事件完全相符
                             iter_num = 0
                             for _iter in event_t.keys():
-                                if event_t[_iter] <= event_tz[_iter]:  # 2 所有事件对应使能时间都比z_state小
+                                if event_t[_iter] <= event_tz[_iter]:                               # 2 所有事件对应使能时间都比z_state小
                                     iter_num += 1
                             if iter_num == event_t.__len__():
                                 try:
                                     # print(event_t, '\t', event_tz)
-                                    if nx.dijkstra_path_length(bts, current_state,
-                                                               state_t) >= 0:  # 4 要求：找到的点和当前要增加的点都必须是在当前同一y状态之下
-                                        root_state = state_t
+                                    if nx.dijkstra_path_length(bts, current_state, state_t) >= 0:   # 4 要求：找到的点和当前要增加的点都必须是在当前同一y状态之下
+                                        state_to_add_t = state_t
                                         for _iter in event_t.keys():
-                                            t_max_t[_iter] = event_t[_iter]  # 3 满足1、2中，每箱使能时间对应最长
+                                            t_max_t[_iter] = event_t[_iter]                         # 3 满足1、2中，每箱使能时间对应最长
                                 except:
                                     pass
+
+                        if z_state == (('2', '6'), (('a', 2, 3), ('b', 2, 3))) and state_t[0] == ('2', '6'):
+                            print(233)
+
+                        # Situation 2
+                        event_t = get_policy_duration(state_t)
+                        is_initial_node_of_a_branch = True
+                        try:
+                            if event_t.keys().__len__() == 0 or not nx.dijkstra_path_length(bts, current_state, state_t) >= 0:      # 0 state_t, 而且必须在同一个y顶点下
+                                continue
+
+                            # 首先判断z_state是不是初始结点
+                            for state_t_t in bts.nodes():
+                                try:
+                                    if (not state_type(state_t_t) == 'Z_state' or state_t_t == z_state) or not nx.dijkstra_path_length(bts, current_state, state_t_t) >= 0: # 同理, 用来辅助判断的state_t_t必须是z状态, 而且必须在同一个y顶点下
+                                        continue
+                                except:
+                                    continue
+
+                                event_t_t = get_policy_duration(state_t_t)
+                                if event_t_t.keys() == event_tz_duration.keys():
+                                    for _iter in event_tz_duration.keys():
+                                        if event_tz_duration[_iter][0] > event_t_t[_iter][0]:
+                                            is_initial_node_of_a_branch = False
+                                            break
+
+                            if is_initial_node_of_a_branch:
+                                event_t_num = 0
+                                for _iter in event_t.keys():
+                                    if _iter in event_tz_duration.keys() and event_t[_iter] == event_tz_duration[_iter]:
+                                        event_t_num += 1
+                                if event_t_num == event_t.__len__() and event_t.__len__() > 0:
+                                    root_state.append(state_t)
+                        except:
+                            pass
+
+                    # add states for situation 1
+                    if -1 not in t_max_t.values() and state_to_add_t != None:
+                        root_state.append(state_to_add_t)
+
+
+                    if root_state.__len__() >= 2:
+                        print(233)
+
+
 
                     # 增加点
                     if not is_state_listed:
                         bts.add_node(z_state)
                     # 增加边
-                    bts.add_edge(root_state, z_state, control=sc_duration)
+                    if root_state.__len__() == 0:                               # 如果点找不到，就是一定连接当前y_state的
+                        bts.add_edge(current_state, z_state, control=sc_duration)
+                    else:
+                        for state_to_add_t in root_state:
+                            bts.add_edge(state_to_add_t, z_state, control=sc_duration)
                     # 这里是将边，当前点，与根节点相连
                     # bts.add_edge(last_state, z_state, control=sc_duration)
 
