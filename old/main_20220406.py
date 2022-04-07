@@ -18,7 +18,7 @@ event_o  = ['o1', 'o2', 'o3']
 event_c  = ['a',  'b',  'o3']
 event_uc = ['o1', 'o2', 'uc']
 
-def dfs_edges(G, event_list, event_uc=event_uc, event_uo=event_uo, source=None, depth_limit=None):
+def dfs_edges(G, event_list, source=None, depth_limit=None):
     if source is None:
         # edges for all components
         nodes = G
@@ -38,19 +38,20 @@ def dfs_edges(G, event_list, event_uc=event_uc, event_uo=event_uo, source=None, 
             try:
                 child = next(children)
 
-                if G.edges[parent, child, 0]['event'] in event_list or \
-                    (G.edges[parent, child, 0]['event'] in event_uo and G.edges[parent, child, 0]['event'] in event_uc):        # 加了这个, 而且加了后面一句, 对于所有uc都是直通的
-                    if str([parent, child]) not in visited:     # 因为list本身不可哈希，所以用str(list())来代替list
-                        yield parent, child                     # yield parent, child 这个版本的python没法调试yield  https://zhuanlan.zhihu.com/p/268605982
-                        visited.add(str([parent, child]))       # visited.add(child)
-                        if depth_now > 1:
-                            stack.append((child, depth_now - 1, iter(G[child])))
+                if G.edges[parent, child, 0]['event'] not in event_list:  # added
+                    continue
+
+                if str([parent, child]) not in visited:     # 因为list本身不可哈希，所以用str(list())来代替list
+                    yield parent, child                     # yield parent, child 这个版本的python没法调试yield  https://zhuanlan.zhihu.com/p/268605982
+                    visited.add(str([parent, child]))       # visited.add(child)
+                    if depth_now > 1:
+                        stack.append((child, depth_now - 1, iter(G[child])))
 
             except StopIteration:
                 stack.pop()
 
-def dfs_events(iwa, event_list, event_uc, event_uo, source):
-    edges = list(dfs_edges(iwa, event_list, event_uc, event_uo, source))
+def dfs_events(iwa, event_list, source):
+    edges = list(dfs_edges(iwa, event_list, source))
 
     G0 = nx.MultiDiGraph()
 
@@ -59,7 +60,7 @@ def dfs_events(iwa, event_list, event_uc, event_uo, source):
         end   = list(edge_t)[1]
         try:
             event = iwa.edges[start, end, 0]['event']
-            if event in event_list or (event in event_uo and event in event_uc):                                 # 计算路径长的时候不能过可观事件
+            if event in event_list:                                 # 计算路径长的时候不能过可观事件
                 t_min =  iwa.edges[start, end, 0]['t_min']
                 t_max = -iwa.edges[start, end, 0]['t_max']          # 用负值，得到的最短距离就是最长距离
                 G0.add_edge(start, end, event=event, t_min=t_min, t_max=t_max)
@@ -135,7 +136,7 @@ def get_t_min(iwa, start, end):
 def get_t_max(iwa, start, end):
     return iwa.edges[start, end, 0]['t_max']
 
-def dfs_ur(dfs_tree, sc, event_uc, event_uo, source=None, depth_limit=None):
+def dfs_ur(dfs_tree, sc, source=None, depth_limit=None):
     if source is None:
         # edges for all components
         nodes = dfs_tree
@@ -158,10 +159,8 @@ def dfs_ur(dfs_tree, sc, event_uc, event_uo, source=None, depth_limit=None):
                 is_edge_reachable = False         # added
                 for sc_t in sc:
                     event_t = list(sc_t)[0]
-                    event_c = dfs_tree.edges[parent, child, 0]['event']
                     t = list(sc_t)[1]
-                    if ((event_t == event_c and dfs_tree.edges[parent, child, 0]['t_min'] <= t) or
-                        (event_c in event_uc and event_c in event_uo)):
+                    if event_t == dfs_tree.edges[parent, child, 0]['event'] and dfs_tree.edges[parent, child, 0]['t_min'] <= t:
                         is_edge_reachable = True
                         break
                 if not is_edge_reachable:
@@ -274,9 +273,6 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
         current_state = y_stack.pop()
 
         for sc in supervisor_ut:
-            if sc == ['a', 'b', 'uc']:
-                print(233)
-
             t_interval = []
 
             max_time_uo = {}
@@ -286,31 +282,27 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 max_time_uo.update({event_t: -1})
                 min_time_uo.update({event_t: 1e6})
             for current_node in current_state:
-                dfs_tree = dfs_events(iwa, sc, event_uc=event_uc, event_uo=event_uo, source=current_node)                    ## 待增加对环状结构的适应性
+                dfs_tree = dfs_events(iwa, sc, current_node)                    ## 待增加对环状结构的适应性
                 t_interval = list(set(t_interval) | set(timeslice(dfs_tree)))
                 t_interval.sort()
 
                 # 求出不同事件对应的时间的最大值
                 for u, v, data in dfs_tree.out_edges(data=True):                 # u, v, data in dfs_tree.out_edges(curr_node, data=True)
-                    for event_t in list(sc):
-                        if data['event'] in sc and data['t_max'] > max_time_uo[event_t]:
-                            max_time_uo[data['event']] = data['t_max']
-                        if data['event'] in sc and data['t_min'] < min_time_uo[event_t]:
-                            min_time_uo[data['event']] = data['t_min']              # 用了个笨办法来处理可观可控事件，因为它不能往下走，所以对他的使能时间有个限制
+                    if data['event'] in sc and data['t_max'] > max_time_uo[event_t]:
+                        max_time_uo[data['event']] = data['t_max']
+                    if data['event'] in sc and data['t_min'] < min_time_uo[event_t]:
+                        min_time_uo[data['event']] = data['t_min']              # 用了个笨办法来处理可观可控事件，因为它不能往下走，所以对他的使能时间有个限制
 
             # 从timeslice内选取不超过时间最大值的时间，给对应事件
             for _iter in max_time_uo.keys():
                 sc_timed_t = []
 
-                '''
                 if _iter not in event_c and _iter in event_uo:
-                    t_interval_uc_uo = timeslice_events(dfs_tree, [_iter])      # 对不可观事件, 用它自己的一个timeslice, 反正到最后计算dfs_ur()的时候都是一起计算无所谓
+                    t_interval_uc_uo = timeslice_events(dfs_tree, [_iter])
                     for t in t_interval_uc_uo:
                         if _iter in event_uo and t < max_time_uo[_iter]:
                             sc_timed_t.append((_iter, t))
                 else:
-                '''
-                if _iter in event_c and _iter in event_uo:
                     for t in t_interval:
                         if _iter not in event_uo and t >= min_time_uo[_iter] and t < max_time_uo[_iter]:                    # <=
                             sc_timed_t.append((_iter, t))
@@ -344,34 +336,23 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 sc_duration = []                                    # 单一使能时间->使能时间集合
                 for sc_timed_t in supervisor_curr:
                     event_t = list(sc_timed_t)[0]
-
                     start_t = list(sc_timed_t)[1]
                     if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
                         end_t = float("inf")
                     else:
                         end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
-
-                    if sc_timed_t[0] not in event_c:
-                        for edge_t in dfs_tree.edges:                                                                               # 对于不可控事件, 打印policy的时候用他自己的区间打印
-                            if dfs_tree.edges[list(edge_t)[0], list(edge_t)[1], list(edge_t)[2]]['event'] == event_t:
-                                t_min = dfs_tree.edges[list(edge_t)[0], list(edge_t)[1], list(edge_t)[2]]['t_min']
-                                t_max = dfs_tree.edges[list(edge_t)[0], list(edge_t)[1], list(edge_t)[2]]['t_max']
-                                if t_min == list(sc_timed_t)[1]:
-                                    start_t = t_min
-                                    end_t   = t_max
-
                     sc_duration.append((event_t, start_t, end_t))
 
                 sc = [sc_ut[0] for sc_ut in supervisor_curr]
 
 
-                if supervisor_curr == [('a', 2), ('b', 1)]:
+                if supervisor_curr == [('a', 2), ('uc', 1)]:
                     print(233)
 
                 for current_node in current_state:
                     try:
-                        dfs_tree = dfs_events(iwa, sc, event_uc, event_uo, current_node)
-                        reachable_edge = list(dfs_ur(dfs_tree, supervisor_curr, event_uc, event_uo, source=current_node))
+                        dfs_tree = dfs_events(iwa, sc, current_node)
+                        reachable_edge = list(dfs_ur(dfs_tree, supervisor_curr, source=current_node))
 
                         # edge -> 可达点
                         ur.append(current_node)
@@ -385,9 +366,8 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                         dfs_tree.edges[edge_t[0], edge_t[1], 0]['t_max'] >= sc_t[2]):       # Critical: 这里的时间是判断该点是否可以被使能
                                             ur.append(list(edge_t)[1])  # 可以发生transition的终点都是可达的点
                                     '''
-                                    event_c_t = dfs_tree.edges[edge_t[0], edge_t[1], 0]['event']
-                                    if ((sc_t[0] == event_c_t and dfs_tree.edges[edge_t[0], edge_t[1], 0]['t_min'] <= sc_t[1]) or
-                                        (event_c_t in event_uc and event_c_t in event_uo)):             # 其实会发现有一个bug, 就是UR一定要从上一个状态算起, 假设当前是Z2, 那么就要从Z1到Z2算UR, 但是这里刚好利用了个换算的机制, 所有的UR都可以从当前的Y点算起, 所以只要计算从这个Y开始的绝对时间大于边的时间, 结果就是对的, 所以下面这个表达式才是对的, 上面那个有道理但是其实忽略了要从上一状态算起
+                                    if sc_t[0] == dfs_tree.edges[edge_t[0], edge_t[1], 0]['event'] and \
+                                        dfs_tree.edges[edge_t[0], edge_t[1], 0]['t_min'] <= sc_t[1]:       # Critical: 这里的时间是判断该点是否可以被使能
                                             ur.append(list(edge_t)[1])  # 可以发生transition的终点都是可达的点
                         ur = list(set(ur))
                         ur.sort()
@@ -487,7 +467,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     for _iter in t_max_t.keys():
                         t_max_t[_iter] = -1  # 初始化，求最大时间
 
-                    for state_t in bts.nodes():  # 找到 decision中，满足如下条件的点：1 事件完全相符 2 事件对应使能时间都比z_state小 3 满足1、2中， 每项使能时间对应最长
+                    for state_t in bts.nodes():  # 找到 decision中，满足如下条件的点：1 事件完全相符 2 事件对应使能时间都比z_state小 3 满足1、2中，每箱使能时间对应最长
                         if not state_type(state_t) == 'Z_state':
                             continue
                         event_t = get_policy_t_min(state_t)
@@ -536,7 +516,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                         if edge_t[2]['event'] in event_o:     # 如果存在可到达的事件
 
                             for current_node in current_state:
-                                dfs_tree = dfs_events(iwa, get_policy_event(state_t), event_uc, event_uo, current_node)
+                                dfs_tree = dfs_events(iwa, get_policy_event(state_t), current_node)
                                 if not (node_t in dfs_tree.nodes() or current_node in dfs_tree.nodes()):
                                     continue
 
@@ -654,7 +634,7 @@ def main():
         iwa.add_edge(edge_t[0], edge_t[1], event=event, t_min=t_min, t_max=t_max)
 
     # 建立一个不可观事件的可达树
-    dfs_tree = dfs_events(iwa, ['b'], source='0', event_uc=event_uc, event_uo=event_uo)
+    dfs_tree = dfs_events(iwa, ['b'], source='0')
 
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
