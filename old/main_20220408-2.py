@@ -395,192 +395,205 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 if z_state == ((), ()):
                     continue
 
-                if z_state in visited:
-                    continue
-
-
-                root_state = []
-                event_tz = get_policy_t_min(z_state)
-                event_tz_duration = get_policy_duration(z_state)        # 虽然这样有点蠢, 两个变量一样的
-                #t_max_t = copy.deepcopy(event_tz)
-                #for _iter in t_max_t.keys():
-                #    t_max_t[_iter] = -1             # 初始化，求最大时间
-                state_to_add_t = []
-
-                # 找到 decision中，满足如下条件的所有点：
-                # Situation 1
-                #   1 事件完全相符
-                #   2 事件对应使能时间都比z_state小
-                #   3 满足1、2中， 每项使能时间对应最长 4 同一Y状态
-                #   4 同属于一个Y
-                # Situation 2
-                # 对于每一个branch的初始结点：如何判定？如果这个结点是他的初始结点, 则找不到一个时间相同, 且使能时间比他短的结点
-                #   1 当前点事件于余目标点事件, i.e., \forall \sigma' \in (\sigma', [t_1, t_2)), (\sigma', [t_1, t_2)) in q_z', (\sigma', [t_1, t_2)) \ in q_z
-                #   2 对应事件事件时间完全相等, q_z' = {(a,[1,2)), (uc,[4,5))} (目标点),       q_z = {(a,[1,2)), (b,[1,7)), (uc,[4,5))}(当前点)
-                #   3 找到满足条件1、2最小的一个点：注意 {(a,[2,3))}可能会同时连接到{(a,[2,3)), (b,[5,9)}和{(a,[2,3)), (b,[2,5))}
-
+                is_state_listed = False                                                                     # 查找该点是否被list出来过
+                is_state_listed_in_this_y = False
                 for state_t in bts.nodes():
-                    try:
-                        if not state_type(state_t) == 'Z_state' or not nx.dijkstra_path_length(bts, current_state, state_t) >= 0:   # 0 要求：找到的点和当前要增加的点都必须是在当前同一y状态之下:
-                            continue
-                    except:
-                        continue
+                    if state_type(z_state) == state_type(state_t) and \
+                            state_t[0] == z_state[0] and \
+                            set(get_policy_event(state_t)) == set(get_policy_event(z_state)):               # 可达点相同，不可观事件相同，但时间不同，则可认为该点listed
+                        is_state_listed = True
+                        try:
+                            if nx.dijkstra_path_length(bts, current_state, state_t) >= 0:
+                                is_state_listed_in_this_y = True
+                                break
+                        except:
+                            pass
 
-                    # Situation 1
-                    event_t = get_policy_t_min(state_t)
-                    if event_t.keys() == event_tz.keys():                                       # 1 事件完全相符
-                        iter_num = 0
-                        for _iter in event_t.keys():
-                            if event_t[_iter] <= event_tz[_iter]:                               # 2 所有事件对应使能时间都比z_state小
-                                iter_num += 1
-                        if iter_num == event_t.__len__():
-                            # print(event_t, '\t', event_tz)
-                            state_to_add_t.append(state_t)                                      # 3 满足1、2中，每箱使能时间对应最长, 先存起来, 然后统计
-                            #for _iter in event_t.keys():
-                            #    t_max_t[_iter] = event_t[_iter]                                # 3 满足1、2中，每箱使能时间对应最长
+                if z_state == (('2', '6', '8', '9'), (('a', 2, 4), ('b', 1, 2))):
+                    print(233)
 
-                    # Situation 2
-                    event_t = get_policy_duration(state_t)
-                    is_initial_node_of_a_branch = True
-                    try:
-                        if event_t.keys().__len__() == 0 or not nx.dijkstra_path_length(bts, current_state, state_t) >= 0:      # 0 state_t, 而且必须在同一个y顶点下
-                            continue
+                # 定义 SHRINK算子
+                # 用来合并这些点
+                if is_state_listed and is_state_listed_in_this_y:                                           # 如果这个点已经有过
+                    node_to_update = []
+                    for edge_t in bts.in_edges(state_t, data=True):
+                        # 更新点
+                        # bts.remove_node(edge_t[0])
+                        # bts.add_node(z_state)
 
-                        # 首先判断z_state是不是初始结点
-                        for state_t_t in bts.nodes():
-                            try:
-                                if (not state_type(state_t_t) == 'Z_state' or state_t_t == z_state) or not nx.dijkstra_path_length(bts, current_state, state_t_t) >= 0: # 同理, 用来辅助判断的state_t_t必须是z状态, 而且必须在同一个y顶点下
+                        # 更新边
+                        # bts.remove_node(edge_t[0], edge_t[1])
+                        sc_last = bts.edges[edge_t[0], edge_t[1], 0]['control']
+
+                        event_last_list = []
+                        for sc_timed_last in sc_last:
+                            event_last_list.append(list(sc_timed_last)[0])
+
+                        for sc_timed_t in supervisor_curr:
+                            event_t = list(sc_timed_t)[0]
+                            for sc_timed_last in sc_last:
+                                event_last = list(sc_timed_last)[0]
+
+                                # 如果这一个控制是存在的，那么则更新，扩大其时间区间
+                                if event_t in event_last_list and event_t != event_last:
                                     continue
-                            except:
+                                elif event_t in event_last_list and event_t == event_last:
+                                    index = event_last_list.index(event_last)
+
+                                    try:
+                                        start_t = bts.edges[edge_t[0], edge_t[1], 0]['control'][index][1]
+                                    except:
+                                        pass
+                                    if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
+                                        end_t = float("inf")
+                                    else:
+                                        end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
+                                    if end_t > bts.edges[edge_t[0], edge_t[1], 0]['control'][index][2]:
+
+                                        # 这边是为了建立new_state_t，即更新了点edge_t[1]状态的点
+                                        event_updated_t = list(edge_t[1][1])
+                                        for i in range(0, event_updated_t.__len__()):
+                                            if event_updated_t[i][0] == event_t:
+                                                event_updated_t[i] = (event_t, start_t, end_t)
+                                        new_state_t = (edge_t[1][0], tuple(event_updated_t))
+
+                                        node_to_update.append((edge_t[0], edge_t[1], new_state_t))
+                                        bts.edges[edge_t[0], edge_t[1], 0]['control'][index] = (event_t, start_t, end_t)
+                                        #nx.relabel_nodes(bts, {edge_t[1] : new_state_t})
+
+
+                    for (old_origin, old_state, new_state) in node_to_update:
+                        # 把edge_t[1]的边都转移到new_state_t上
+                        bts.add_node(new_state)
+                        for edge_t_t in bts.in_edges(old_state, data=True):
+                            bts.add_edge(edge_t_t[0], new_state, control=edge_t_t[2]['control'])
+                        for edge_t_t in bts.out_edges(old_state, data=True):
+                            bts.add_edge(new_state, edge_t_t[1], control=list(new_state[1]))        # control=edge_t_t[2]['control']
+
+                        bts.remove_node(old_state)
+                        bts.add_edge(old_origin, new_state, control=tuple(event_updated_t))
+                        #bts.edges[edge_t[0], new_state_t, 0]['control'][index] = (event_t, start_t, end_t)
+
+                    # elif is_state_listed and not is_state_listed_in_this_y:     # 如果这个点对于当前y来说是全新的
+                    #    print(4666)
+                    #    pass
+                else:
+
+                    root_state = []
+                    event_tz = get_policy_t_min(z_state)
+                    event_tz_duration = get_policy_duration(z_state)        # 虽然这样有点蠢, 两个变量一样的
+                    #t_max_t = copy.deepcopy(event_tz)
+                    #for _iter in t_max_t.keys():
+                    #    t_max_t[_iter] = -1             # 初始化，求最大时间
+                    state_to_add_t = []
+
+                    # 找到 decision中，满足如下条件的所有点：
+                    # Situation 1
+                    #   1 事件完全相符
+                    #   2 事件对应使能时间都比z_state小
+                    #   3 满足1、2中， 每项使能时间对应最长 4 同一Y状态
+                    #   4 同属于一个Y
+                    # Situation 2
+                    # 对于每一个branch的初始结点：如何判定？如果这个结点是他的初始结点, 则找不到一个时间相同, 且使能时间比他短的结点
+                    #   1 当前点事件于余目标点事件, i.e., \forall \sigma' \in (\sigma', [t_1, t_2)), (\sigma', [t_1, t_2)) in q_z', (\sigma', [t_1, t_2)) \ in q_z
+                    #   2 对应事件事件时间完全相等, q_z' = {(a,[1,2)), (uc,[4,5))} (目标点),       q_z = {(a,[1,2)), (b,[1,7)), (uc,[4,5))}(当前点)
+                    #   3 找到满足条件1、2最小的一个点：注意 {(a,[2,3))}可能会同时连接到{(a,[2,3)), (b,[5,9)}和{(a,[2,3)), (b,[2,5))}
+                    for state_t in bts.nodes():
+                        try:
+                            if not state_type(state_t) == 'Z_state' or not nx.dijkstra_path_length(bts, current_state, state_t) >= 0:   # 0 要求：找到的点和当前要增加的点都必须是在当前同一y状态之下:
+                                continue
+                        except:
+                            continue
+
+                        # Situation 1
+                        event_t = get_policy_t_min(state_t)
+                        event_t_duration = get_policy_duration(state_t)
+
+                        is_all_event_match = True
+                        for sigma_t in event_t.keys():
+                            if sigma_t not in event_tz.keys():
+                                is_all_event_match = False
+
+                        if state_t == (('8', '9'), (('a', 1, 2),)) and z_state[0] == ('2', '6', '8', '9'):
+                            print(233)
+
+                        # if event_t.keys() == event_tz.keys():                                       # 1 事件完全相符
+                        if is_all_event_match == True:
+                            iter_num = 0
+                            for _iter in event_t.keys():
+                                if event_t[_iter] <= event_tz[_iter]:                               # 2 所有事件对应使能时间都比z_state小
+                                    iter_num += 1
+                            if iter_num == event_t.__len__():
+                                is_all_event_subset = True
+                                for gamma_t in event_t_duration.keys():
+                                    for gamma_z in event_tz_duration.keys():
+                                        if gamma_t == gamma_z:
+                                            if not event_t_duration[gamma_t][1] <= event_tz_duration[gamma_z][1]:
+                                                is_all_event_subset = False
+
+                                if is_all_event_subset:
+                                    state_to_add_t.append(state_t)                                      # 3 满足1、2中，每箱使能时间对应最长, 先存起来, 然后统计
+                                #for _iter in event_t.keys():
+                                #    t_max_t[_iter] = event_t[_iter]                                # 3 满足1、2中，每箱使能时间对应最长
+
+                        # Situation 2
+                        event_t = get_policy_duration(state_t)
+                        is_initial_node_of_a_branch = True
+                        try:
+                            if event_t.keys().__len__() == 0 or not nx.dijkstra_path_length(bts, current_state, state_t) >= 0:      # 0 state_t, 而且必须在同一个y顶点下
                                 continue
 
-                            event_t_t = get_policy_duration(state_t_t)
-                            if event_t_t.keys() == event_tz_duration.keys():
-                                for _iter in event_tz_duration.keys():
-                                    if event_tz_duration[_iter][0] > event_t_t[_iter][0]:
-                                        is_initial_node_of_a_branch = False
-                                        break
+                            # 首先判断z_state是不是初始结点
+                            for state_t_t in bts.nodes():
+                                try:
+                                    if (not state_type(state_t_t) == 'Z_state' or state_t_t == z_state) or not nx.dijkstra_path_length(bts, current_state, state_t_t) >= 0: # 同理, 用来辅助判断的state_t_t必须是z状态, 而且必须在同一个y顶点下
+                                        continue
+                                except:
+                                    continue
 
-                        if is_initial_node_of_a_branch:
-                            event_t_num = 0
-                            for _iter in event_t.keys():
-                                if _iter in event_tz_duration.keys() and event_t[_iter] == event_tz_duration[_iter]:
-                                    event_t_num += 1
-                            if event_t_num == event_t.__len__() and event_t.__len__() > 0:
-                                root_state.append(state_t)
-                    except:
-                        pass
+                                event_t_t = get_policy_duration(state_t_t)
+                                if event_t_t.keys() == event_tz_duration.keys():
+                                    for _iter in event_tz_duration.keys():
+                                        if event_tz_duration[_iter][0] > event_t_t[_iter][0]:
+                                            is_initial_node_of_a_branch = False
+                                            break
 
-                # add states for situation 1
-                if state_to_add_t.__len__():
-                    root_state.append(state_to_add_t[state_to_add_t.__len__() - 1])     # 3 满足1、2中，每箱使能时间对应最长, 这里讨了个巧, 因为所有的z状态都是根据policy排序的, 排序工作在之前就做好了, 所以这边直接取最后一个就行
+                            if is_initial_node_of_a_branch:
+                                event_t_num = 0
+                                for _iter in event_t.keys():
+                                    if _iter in event_tz_duration.keys() and event_t[_iter] == event_tz_duration[_iter]:
+                                        event_t_num += 1
+                                if event_t_num == event_t.__len__() and event_t.__len__() > 0:
+                                    root_state.append(state_t)
+                        except:
+                            pass
 
-                # 增加点
-                #if not is_state_listed:
-                if True:
-                    bts.add_node(z_state)
+                    if (('8', '9'), (('a', 1, 2),)) in state_to_add_t and z_state[0] == ('2', '6', '8', '9'):
+                        print(233)
 
-                    visited.append(z_state)
-                # 增加边
-                if root_state.__len__() == 0:                                       # 如果点找不到，就是一定连接当前y_state的
-                    bts.add_edge(current_state, z_state, control=sc_duration)
-                else:
-                    for state_to_add_t in root_state:
-                        bts.add_edge(state_to_add_t, z_state, control=sc_duration)
-                # 这里是将边，当前点，与根节点相连
-                # bts.add_edge(last_state, z_state, control=sc_duration)
+                    # add states for situation 1
+                    if state_to_add_t.__len__():
+                        for _iter in state_to_add_t:
+                            if state_type(_iter) != 'Z_state' or _iter[1].__len__() == 0:  # 去掉非z状态和(('8'), ())这样的状态
+                                state_to_add_t.pop(state_to_add_t.index(_iter))
 
-                # ITERATION
-                # last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
+                        root_state.append(state_to_add_t[state_to_add_t.__len__() - 1])     # 3 满足1、2中，每箱使能时间对应最长, 这里讨了个巧, 因为所有的z状态都是根据policy排序的, 排序工作在之前就做好了, 所以这边直接取最后一个就行
 
+                                                                                           # 其实这个点要往下解释, 第三点可以改成可达点更多的Z状态，为什么，因为可达点相同的都被合并了
+                    # 增加点
+                    if not is_state_listed:
+                        bts.add_node(z_state)
+                    # 增加边
+                    if root_state.__len__() == 0:                                           # 如果点找不到，就是一定连接当前y_state的
+                        bts.add_edge(current_state, z_state, control=sc_duration)
+                    else:
+                      for state_to_add_t in root_state:
+                            bts.add_edge(state_to_add_t, z_state, control=sc_duration)
+                    # 这里是将边，当前点，与根节点相连
+                    # bts.add_edge(last_state, z_state, control=sc_duration)
 
-        # 合并
-        # 输出点的z状态唯一，且可达状态相同（可以既连y又连z，但是只能连1个z）
-        num_to_merge = 1
-
-        '''
-        while num_to_merge:
-        '''
-        num_edge_to_merge = -1
-        while num_edge_to_merge != 0:
-            num_edge_to_merge = 0
-            edges_yzz = list(nx.dfs_edges(bts, source=current_state))
-            for edge_t in edges_yzz:
-                if (('2', '6'), (('a', 2, 3), ('b', 3, 5),)) in edge_t and (('2', '6'), (('a', 2, 3), ('b', 3, 4),)) in edge_t:
-                    print(2333)
-
-
-                if state_type(edge_t[0]) == 'Z_state' and state_type(edge_t[1]) == 'Z_state' and \
-                   edge_t[0][0] == edge_t[1][0]:                                                                             # 可达状态相同
-                    #if list(bts.in_edges(edge_t[0])).__len__() <= 2 and list(bts.out_edges(edge_t[0])).__len__() <= 2 and \
-                    #   list(bts.in_edges(edge_t[1])).__len__() <= 2 and list(bts.out_edges(edge_t[1])).__len__() <= 2:       # 后面发现后结点可以是终止结点, 所以可以没有out_edges(所以是 <= 2)      # 是2就是对的, 因为有self-loop, 而且因为没算NX, 所以没有Z-Y算数量
-                    if list(bts.out_edges(edge_t[0])).__len__() <= 2 and list(bts.in_edges(edge_t[1])).__len__() <= 2:
-                        policy_1 = get_policy_duration(edge_t[0])
-                        policy_2 = get_policy_duration(edge_t[1])
-                        ur = edge_t[0][0]
-                        policy_updated = []
-                        for gamma_1 in policy_1.keys():
-                            t_min = min(policy_1[gamma_1][0], policy_2[gamma_1][0])
-                            t_max = max(policy_1[gamma_1][1], policy_2[gamma_1][1])
-                            policy_updated.append((gamma_1, t_min, t_max))
-
-                        new_state = (ur, tuple(policy_updated))
-                        bts.add_node(new_state)
-
-                        #is_in_edge_added = False
-                        for edge_t_t in list(bts.in_edges(edge_t[0])):
-                            if edge_t_t[0] != edge_t[0]:
-                                in_node  = edge_t_t[0]                                             # 有的时候顺序会乱, 因为有个self-loop, 所以要找到不是self-loop的那个元素才是对的
-                                bts.add_edge(in_node, new_state, control=tuple(policy_updated))
-                                #is_in_edge_added = True
-                        # = False
-                        for edge_t_t in list(bts.out_edges(edge_t[1], data=True)):
-                            if edge_t_t[1] != edge_t[1]:
-                                out_node  = edge_t_t[1]
-                                if state_type(edge_t_t[1]) == 'Z_state':
-                                    bts.add_edge(new_state, out_node, control=edge_t_t[2]['control'])
-                                else:
-                                    bts.add_edge(new_state, out_node, control=edge_t_t[2]['observation'])
-                                #is_out_edge_added = True
-
-                        print(list(bts.in_edges((('2', '5', '6'), (('a', 4, 6), )))).__len__(),  list(bts.out_edges((('2', '5', '6'), (('a', 4, 6), )))).__len__())
-
-                        #if is_in_edge_added and is_out_edge_added:
-                        if True:
-                            try:
-                                if (('2', '5', '6'), (('a', 3, 6),)) in edge_t:
-                                    print(2333)
-
-                                if new_state != edge_t[0]:
-                                    bts.remove_node(edge_t[0])
-                                if new_state != edge_t[1]:
-                                    bts.remove_node(edge_t[1])
-                                #bts.remove_edge(edge_t[0], edge_t[1])
-                            except:
-                                pass
-
-                        num_edge_to_merge += 1
-                        break                                                               # 为了保证充分合并, 每次都只处理第一个, 然后检查更新结果
-
-            bts_edge_list = list(bts.edges())                                               # 清一下多余元素, 这个是之前代码生成的时候出的问题, 做了这一步可以减少对merge的影响
-            edge_repeated = []
-            for edge_t in bts_edge_list:
-                if edge_t in bts_edge_list[bts_edge_list.index(edge_t) + 1 : ]:
-                    if (('2', '6'), (('b', 4, 5),)) in edge_t:
-                        print(466)
-                    if (('2', '3', '6'), (('b', 5, 9),)) in edge_t:
-                        print(466)
-                    edge_repeated.append(edge_t)
-
-            edge_repeated = list(set(edge_repeated))
-            for edge_t in edge_repeated:
-                try:
-                    bts.remove_edge(edge_t[0], edge_t[1])
-                except:
-                    pass
-
-        print(list(bts.in_edges((('2', '5', '6'), (('a', 3, 6),)))).__len__(),
-              list(bts.out_edges((('2', '5', '6'), (('a', 3, 6),)))).__len__(), (('2', '5', '6'), (('a', 3, 6),)))
+                    # ITERATION
+                    # last_state = z_state  # 迭代更新，因为前面edge都是排好的，所以这里直接加进来
 
         # 求NX
         # 现有思路：  针对每一个Z状态，求下一状态
@@ -685,7 +698,8 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
             except:
                 pass
         for index in range(0, edge_to_add.__len__()):      # dictionary changed size during iteration
-            bts.add_edge(edge_to_add[index][0], edge_to_add[index][1], observation=edge_to_add[index][2])
+            bts.add_edge(edge_to_add[index][0], edge_to_add[index][1], observtion=edge_to_add[index][2])
+
 
     return bts
 
@@ -719,7 +733,7 @@ def main():
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
 
-    init_state = ['6']                                                  # ['0', '6'], ['6'] ['0'] ['8']
+    init_state = ['8']                                                  # ['0', '6'], ['6'] ['0'] ['8']
     bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
