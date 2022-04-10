@@ -18,20 +18,6 @@ event_o  = ['o1', 'o2', 'o3']
 event_c  = ['a',  'b',  'o3']
 event_uc = ['o1', 'o2', 'uc']
 
-def number_out_edges(G, node):
-    number = 0
-    for edge_t in list(G.out_edges(node)):
-        if edge_t[0] != edge_t[1]:
-            number += 1
-    return number
-
-def number_in_edges(G, node):
-    number = 0
-    for edge_t in list(G.in_edges(node)):
-        if edge_t[0] != edge_t[1]:
-            number += 1
-    return number
-
 def dfs_edges(G, event_list, event_uc=event_uc, event_uo=event_uo, source=None, depth_limit=None):
     if source is None:
         # edges for all components
@@ -525,7 +511,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
         node_to_merge = []
         for edge_t in edges_yzz:
             if state_type(edge_t[0]) == 'Z_state' and state_type(edge_t[1]) == 'Z_state' and edge_t[0][0] == edge_t[1][0]:  # 可达状态相同
-                if number_out_edges(bts, edge_t[0]) == 1 and number_in_edges(bts, edge_t[1]) == 1 and get_policy_duration(edge_t[0]).keys() == get_policy_duration(edge_t[1]).keys():
+                if list(bts.out_edges(edge_t[0])).__len__() <= 2 and list(bts.in_edges(edge_t[1])).__len__() <= 2 and get_policy_duration(edge_t[0]).keys() == get_policy_duration(edge_t[1]).keys():
                     # 两个点之间只有一条边, 且可达状态相同
                     try:
                         if edge_t[0] in node_to_merge[node_to_merge.__len__() - 1]:
