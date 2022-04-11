@@ -19,7 +19,7 @@ event_o  = ['o1', 'o2', 'o3']
 event_c  = ['a',  'b',  'o3']
 event_uc = ['o1', 'o2', 'uc']
 
-def dfs_edges(G, event_list, event_uc=event_uc, event_uo=event_uo, source=None, depth_limit=None):
+def dfs_edges(G, event_list, source=None, depth_limit=None):
     if source is None:
         # edges for all components
         nodes = G
@@ -39,19 +39,20 @@ def dfs_edges(G, event_list, event_uc=event_uc, event_uo=event_uo, source=None, 
             try:
                 child = next(children)
 
-                if G.edges[parent, child, 0]['event'] in event_list or \
-                    (G.edges[parent, child, 0]['event'] in event_uo and G.edges[parent, child, 0]['event'] in event_uc):        # 加了这个, 而且加了后面一句, 对于所有uc都是直通的
-                    if str([parent, child]) not in visited:     # 因为list本身不可哈希，所以用str(list())来代替list
-                        yield parent, child                     # yield parent, child 这个版本的python没法调试yield  https://zhuanlan.zhihu.com/p/268605982
-                        visited.add(str([parent, child]))       # visited.add(child)
-                        if depth_now > 1:
-                            stack.append((child, depth_now - 1, iter(G[child])))
+                if G.edges[parent, child, 0]['event'] not in event_list:  # added
+                    continue
+
+                if str([parent, child]) not in visited:     # 因为list本身不可哈希，所以用str(list())来代替list
+                    yield parent, child                     # yield parent, child 这个版本的python没法调试yield  https://zhuanlan.zhihu.com/p/268605982
+                    visited.add(str([parent, child]))       # visited.add(child)
+                    if depth_now > 1:
+                        stack.append((child, depth_now - 1, iter(G[child])))
 
             except StopIteration:
                 stack.pop()
 
-def dfs_events(iwa, event_list, event_uc, event_uo, source):
-    edges = list(dfs_edges(iwa, event_list, event_uc, event_uo, source))
+def dfs_events(iwa, event_list, source):
+    edges = list(dfs_edges(iwa, event_list, source))
 
     G0 = nx.MultiDiGraph()
 
@@ -60,7 +61,7 @@ def dfs_events(iwa, event_list, event_uc, event_uo, source):
         end   = list(edge_t)[1]
         try:
             event = iwa.edges[start, end, 0]['event']
-            if event in event_list or (event in event_uo and event in event_uc):                                 # 计算路径长的时候不能过可观事件
+            if event in event_list:                                 # 计算路径长的时候不能过可观事件
                 t_min =  iwa.edges[start, end, 0]['t_min']
                 t_max = -iwa.edges[start, end, 0]['t_max']          # 用负值，得到的最短距离就是最长距离
                 G0.add_edge(start, end, event=event, t_min=t_min, t_max=t_max)
@@ -136,7 +137,7 @@ def get_t_min(iwa, start, end):
 def get_t_max(iwa, start, end):
     return iwa.edges[start, end, 0]['t_max']
 
-def dfs_ur(dfs_tree, sc, event_uc, event_uo, source=None, depth_limit=None):
+def dfs_ur(dfs_tree, sc, source=None, depth_limit=None):
     if source is None:
         # edges for all components
         nodes = dfs_tree
@@ -159,10 +160,8 @@ def dfs_ur(dfs_tree, sc, event_uc, event_uo, source=None, depth_limit=None):
                 is_edge_reachable = False         # added
                 for sc_t in sc:
                     event_t = list(sc_t)[0]
-                    event_c = dfs_tree.edges[parent, child, 0]['event']
                     t = list(sc_t)[1]
-                    if ((event_t == event_c and dfs_tree.edges[parent, child, 0]['t_min'] <= t) or
-                        (event_c in event_uc and event_c in event_uo)):
+                    if event_t == dfs_tree.edges[parent, child, 0]['event'] and dfs_tree.edges[parent, child, 0]['t_min'] <= t:
                         is_edge_reachable = True
                         break
                 if not is_edge_reachable:
@@ -275,9 +274,6 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
         current_state = y_stack.pop()
 
         for sc in supervisor_ut:
-            if sc == ['a', 'b', 'uc']:
-                print(233)
-
             t_interval = []
 
             max_time_uo = {}
@@ -287,31 +283,27 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 max_time_uo.update({event_t: -1})
                 min_time_uo.update({event_t: 1e6})
             for current_node in current_state:
-                dfs_tree = dfs_events(iwa, sc, event_uc=event_uc, event_uo=event_uo, source=current_node)                    ## 待增加对环状结构的适应性
+                dfs_tree = dfs_events(iwa, sc, current_node)                    ## 待增加对环状结构的适应性
                 t_interval = list(set(t_interval) | set(timeslice(dfs_tree)))
                 t_interval.sort()
 
                 # 求出不同事件对应的时间的最大值
                 for u, v, data in dfs_tree.out_edges(data=True):                 # u, v, data in dfs_tree.out_edges(curr_node, data=True)
-                    for event_t in list(sc):
-                        if data['event'] in sc and data['t_max'] > max_time_uo[event_t]:
-                            max_time_uo[data['event']] = data['t_max']
-                        if data['event'] in sc and data['t_min'] < min_time_uo[event_t]:
-                            min_time_uo[data['event']] = data['t_min']              # 用了个笨办法来处理可观可控事件，因为它不能往下走，所以对他的使能时间有个限制
+                    if data['event'] in sc and data['t_max'] > max_time_uo[event_t]:
+                        max_time_uo[data['event']] = data['t_max']
+                    if data['event'] in sc and data['t_min'] < min_time_uo[event_t]:
+                        min_time_uo[data['event']] = data['t_min']              # 用了个笨办法来处理可观可控事件，因为它不能往下走，所以对他的使能时间有个限制
 
             # 从timeslice内选取不超过时间最大值的时间，给对应事件
             for _iter in max_time_uo.keys():
                 sc_timed_t = []
 
-                '''
                 if _iter not in event_c and _iter in event_uo:
-                    t_interval_uc_uo = timeslice_events(dfs_tree, [_iter])      # 对不可观事件, 用它自己的一个timeslice, 反正到最后计算dfs_ur()的时候都是一起计算无所谓
+                    t_interval_uc_uo = timeslice_events(dfs_tree, [_iter])
                     for t in t_interval_uc_uo:
                         if _iter in event_uo and t < max_time_uo[_iter]:
                             sc_timed_t.append((_iter, t))
                 else:
-                '''
-                if _iter in event_c and _iter in event_uo:
                     for t in t_interval:
                         if _iter not in event_uo and t >= min_time_uo[_iter] and t < max_time_uo[_iter]:                    # <=
                             sc_timed_t.append((_iter, t))
@@ -345,34 +337,23 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 sc_duration = []                                    # 单一使能时间->使能时间集合
                 for sc_timed_t in supervisor_curr:
                     event_t = list(sc_timed_t)[0]
-
                     start_t = list(sc_timed_t)[1]
                     if t_interval.index(list(sc_timed_t)[1]) == t_interval.__len__() - 1:
                         end_t = float("inf")
                     else:
                         end_t = t_interval[t_interval.index(list(sc_timed_t)[1]) + 1]
-
-                    if sc_timed_t[0] not in event_c:
-                        for edge_t in dfs_tree.edges:                                                                               # 对于不可控事件, 打印policy的时候用他自己的区间打印
-                            if dfs_tree.edges[list(edge_t)[0], list(edge_t)[1], list(edge_t)[2]]['event'] == event_t:
-                                t_min = dfs_tree.edges[list(edge_t)[0], list(edge_t)[1], list(edge_t)[2]]['t_min']
-                                t_max = dfs_tree.edges[list(edge_t)[0], list(edge_t)[1], list(edge_t)[2]]['t_max']
-                                if t_min == list(sc_timed_t)[1]:
-                                    start_t = t_min
-                                    end_t   = t_max
-
                     sc_duration.append((event_t, start_t, end_t))
 
                 sc = [sc_ut[0] for sc_ut in supervisor_curr]
 
 
-                if supervisor_curr == [('a', 2), ('b', 1)]:
+                if supervisor_curr == [('a', 2), ('uc', 1)]:
                     print(233)
 
                 for current_node in current_state:
                     try:
-                        dfs_tree = dfs_events(iwa, sc, event_uc, event_uo, current_node)
-                        reachable_edge = list(dfs_ur(dfs_tree, supervisor_curr, event_uc, event_uo, source=current_node))
+                        dfs_tree = dfs_events(iwa, sc, current_node)
+                        reachable_edge = list(dfs_ur(dfs_tree, supervisor_curr, source=current_node))
 
                         # edge -> 可达点
                         ur.append(current_node)
@@ -386,9 +367,8 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                         dfs_tree.edges[edge_t[0], edge_t[1], 0]['t_max'] >= sc_t[2]):       # Critical: 这里的时间是判断该点是否可以被使能
                                             ur.append(list(edge_t)[1])  # 可以发生transition的终点都是可达的点
                                     '''
-                                    event_c_t = dfs_tree.edges[edge_t[0], edge_t[1], 0]['event']
-                                    if ((sc_t[0] == event_c_t and dfs_tree.edges[edge_t[0], edge_t[1], 0]['t_min'] <= sc_t[1]) or
-                                        (event_c_t in event_uc and event_c_t in event_uo)):             # 其实会发现有一个bug, 就是UR一定要从上一个状态算起, 假设当前是Z2, 那么就要从Z1到Z2算UR, 但是这里刚好利用了个换算的机制, 所有的UR都可以从当前的Y点算起, 所以只要计算从这个Y开始的绝对时间大于边的时间, 结果就是对的, 所以下面这个表达式才是对的, 上面那个有道理但是其实忽略了要从上一状态算起
+                                    if sc_t[0] == dfs_tree.edges[edge_t[0], edge_t[1], 0]['event'] and \
+                                        dfs_tree.edges[edge_t[0], edge_t[1], 0]['t_min'] <= sc_t[1]:       # Critical: 这里的时间是判断该点是否可以被使能
                                             ur.append(list(edge_t)[1])  # 可以发生transition的终点都是可达的点
                         ur = list(set(ur))
                         ur.sort()
@@ -482,94 +462,37 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     #    pass
                 else:
 
-                    root_state = []
+                    root_state = current_state  # 如果点找不到，就是一定连接当前y_state的
                     event_tz = get_policy_t_min(z_state)
-                    event_tz_duration = get_policy_duration(z_state)        # 虽然这样有点蠢, 两个变量一样的
-                    #t_max_t = copy.deepcopy(event_tz)
-                    #for _iter in t_max_t.keys():
-                    #    t_max_t[_iter] = -1             # 初始化，求最大时间
-                    state_to_add_t = []
+                    t_max_t = copy.deepcopy(event_tz)
+                    for _iter in t_max_t.keys():
+                        t_max_t[_iter] = -1  # 初始化，求最大时间
 
-                    # 找到 decision中，满足如下条件的所有点：
-                    # Situation 1
-                    #   1 事件完全相符
-                    #   2 事件对应使能时间都比z_state小
-                    #   3 满足1、2中， 每项使能时间对应最长 4 同一Y状态
-                    #   4 同属于一个Y
-                    # Situation 2
-                    # 对于每一个branch的初始结点：如何判定？如果这个结点是他的初始结点, 则找不到一个时间相同, 且使能时间比他短的结点
-                    #   1 当前点事件于余目标点事件, i.e., \forall \sigma' \in (\sigma', [t_1, t_2)), (\sigma', [t_1, t_2)) in q_z', (\sigma', [t_1, t_2)) \ in q_z
-                    #   2 对应事件事件时间完全相等, q_z' = {(a,[1,2)), (uc,[4,5))} (目标点),       q_z = {(a,[1,2)), (b,[1,7)), (uc,[4,5))}(当前点)
-                    #   3 找到满足条件1、2最小的一个点：注意 {(a,[2,3))}可能会同时连接到{(a,[2,3)), (b,[5,9)}和{(a,[2,3)), (b,[2,5))}
-
-                    for state_t in bts.nodes():
-                        try:
-                            if not state_type(state_t) == 'Z_state' or not nx.dijkstra_path_length(bts, current_state, state_t) >= 0:   # 0 要求：找到的点和当前要增加的点都必须是在当前同一y状态之下:
-                                continue
-                        except:
+                    for state_t in bts.nodes():  # 找到 decision中，满足如下条件的点：1 事件完全相符 2 事件对应使能时间都比z_state小 3 满足1、2中，每箱使能时间对应最长
+                        if not state_type(state_t) == 'Z_state':
                             continue
-
-                        # Situation 1
                         event_t = get_policy_t_min(state_t)
-                        if event_t.keys() == event_tz.keys():                                       # 1 事件完全相符
+                        if event_t.keys() == event_tz.keys():  # 1 事件完全相符
                             iter_num = 0
                             for _iter in event_t.keys():
-                                if event_t[_iter] <= event_tz[_iter]:                               # 2 所有事件对应使能时间都比z_state小
+                                if event_t[_iter] <= event_tz[_iter]:  # 2 所有事件对应使能时间都比z_state小
                                     iter_num += 1
                             if iter_num == event_t.__len__():
-                                # print(event_t, '\t', event_tz)
-                                state_to_add_t.append(state_t)                                      # 3 满足1、2中，每箱使能时间对应最长, 先存起来, 然后统计
-                                #for _iter in event_t.keys():
-                                #    t_max_t[_iter] = event_t[_iter]                                # 3 满足1、2中，每箱使能时间对应最长
-
-                        if z_state == (('2', '6'), (('a', 2, 3), ('b', 2, 3))) and state_t[0] == ('2', '6'):
-                            print(233)
-
-                        # Situation 2
-                        event_t = get_policy_duration(state_t)
-                        is_initial_node_of_a_branch = True
-                        try:
-                            if event_t.keys().__len__() == 0 or not nx.dijkstra_path_length(bts, current_state, state_t) >= 0:      # 0 state_t, 而且必须在同一个y顶点下
-                                continue
-
-                            # 首先判断z_state是不是初始结点
-                            for state_t_t in bts.nodes():
                                 try:
-                                    if (not state_type(state_t_t) == 'Z_state' or state_t_t == z_state) or not nx.dijkstra_path_length(bts, current_state, state_t_t) >= 0: # 同理, 用来辅助判断的state_t_t必须是z状态, 而且必须在同一个y顶点下
-                                        continue
+                                    # print(event_t, '\t', event_tz)
+                                    if nx.dijkstra_path_length(bts, current_state,
+                                                               state_t) >= 0:  # 4 要求：找到的点和当前要增加的点都必须是在当前同一y状态之下
+                                        root_state = state_t
+                                        for _iter in event_t.keys():
+                                            t_max_t[_iter] = event_t[_iter]  # 3 满足1、2中，每箱使能时间对应最长
                                 except:
-                                    continue
-
-                                event_t_t = get_policy_duration(state_t_t)
-                                if event_t_t.keys() == event_tz_duration.keys():
-                                    for _iter in event_tz_duration.keys():
-                                        if event_tz_duration[_iter][0] > event_t_t[_iter][0]:
-                                            is_initial_node_of_a_branch = False
-                                            break
-
-                            if is_initial_node_of_a_branch:
-                                event_t_num = 0
-                                for _iter in event_t.keys():
-                                    if _iter in event_tz_duration.keys() and event_t[_iter] == event_tz_duration[_iter]:
-                                        event_t_num += 1
-                                if event_t_num == event_t.__len__() and event_t.__len__() > 0:
-                                    root_state.append(state_t)
-                        except:
-                            pass
-
-                    # add states for situation 1
-                    if state_to_add_t.__len__():
-                        root_state.append(state_to_add_t[state_to_add_t.__len__() - 1])     # 3 满足1、2中，每箱使能时间对应最长, 这里讨了个巧, 因为所有的z状态都是根据policy排序的, 排序工作在之前就做好了, 所以这边直接取最后一个就行
+                                    pass
 
                     # 增加点
                     if not is_state_listed:
                         bts.add_node(z_state)
                     # 增加边
-                    if root_state.__len__() == 0:                                       # 如果点找不到，就是一定连接当前y_state的
-                        bts.add_edge(current_state, z_state, control=sc_duration)
-                    else:
-                        for state_to_add_t in root_state:
-                            bts.add_edge(state_to_add_t, z_state, control=sc_duration)
+                    bts.add_edge(root_state, z_state, control=sc_duration)
                     # 这里是将边，当前点，与根节点相连
                     # bts.add_edge(last_state, z_state, control=sc_duration)
 
@@ -594,7 +517,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                         if edge_t[2]['event'] in event_o:     # 如果存在可到达的事件
 
                             for current_node in current_state:
-                                dfs_tree = dfs_events(iwa, get_policy_event(state_t), event_uc, event_uo, current_node)
+                                dfs_tree = dfs_events(iwa, get_policy_event(state_t), current_node)
                                 if not (node_t in dfs_tree.nodes() or current_node in dfs_tree.nodes()):
                                     continue
 
@@ -684,7 +607,6 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
         for index in range(0, edge_to_add.__len__()):      # dictionary changed size during iteration
             bts.add_edge(edge_to_add[index][0], edge_to_add[index][1], observtion=edge_to_add[index][2])
 
-
     # 全部算完以后, 再最后做一个trim的工作
     # 第一步是删除所有重复的边
     edge_all = list(bts.edges())
@@ -770,7 +692,7 @@ def main():
         iwa.add_edge(edge_t[0], edge_t[1], event=event, t_min=t_min, t_max=t_max)
 
     # 建立一个不可观事件的可达树
-    dfs_tree = dfs_events(iwa, ['b'], source='0', event_uc=event_uc, event_uo=event_uo)
+    dfs_tree = dfs_events(iwa, ['b'], source='0')
 
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)

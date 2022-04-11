@@ -525,10 +525,10 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
         node_to_merge = []
         for edge_t in edges_yzz:
             if state_type(edge_t[0]) == 'Z_state' and state_type(edge_t[1]) == 'Z_state' and edge_t[0][0] == edge_t[1][0]:  # 可达状态相同
-                if number_out_edges(bts, edge_t[0]) == 1 and number_in_edges(bts, edge_t[1]) == 1 and get_policy_duration(edge_t[0]).keys() == get_policy_duration(edge_t[1]).keys():
-                    # 两个点之间只有一条边, 且可达状态相同
+                if number_in_edges(bts, edge_t[1]) == 1 and get_policy_duration(edge_t[0]).keys() == get_policy_duration(edge_t[1]).keys(): # if number_out_edges(bts, edge_t[0]) <= 2 and number_in_edges(bts, edge_t[1]) == 1 and get_policy_duration(edge_t[0]).keys() == get_policy_duration(edge_t[1]).keys():
+                    # edge_t[1]单输入
                     try:
-                        if edge_t[0] in node_to_merge[node_to_merge.__len__() - 1]:
+                        if edge_t[0] in node_to_merge[node_to_merge.__len__() - 1]:                         # and number_out_edges(bts, edge_t[0]) == 1: 其实很多时候我们不用区分那么细, 关键是同样的可达状态, 我最多能使能多少事件, 时间能干到多大, 这才是我们关心的
                             node_to_merge[node_to_merge.__len__() - 1].append(edge_t[1])                    # 如果在之前已经找过可达点相同的点, 则把当前这个点merge进原来的list
                         else:
                             node_to_merge.append([edge_t[0], edge_t[1]])                                    # 否则添加新的可合并点子集
@@ -536,11 +536,64 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                         node_to_merge.append([edge_t[0], edge_t[1]])
                         pass
 
+        # 做检验, 看看有哪些点不能合并, 要pop
+        node_to_merge_to_pop = []
+        for node_to_merge_t in node_to_merge:
+            policy_updated = get_policy_duration(node_to_merge_t[0])
+
+            for sigma_t in policy_updated.keys():
+                policy_updated[sigma_t] = list(policy_updated[sigma_t])                                     # tuple -> list, 初始化一下, 后面好赋值
+
+            for z_state in node_to_merge_t:
+                policy_current = get_policy_duration(z_state)
+                for sigma_t in policy_updated.keys():
+                    policy_updated[sigma_t][0] = min(policy_updated[sigma_t][0], policy_current[sigma_t][0])# 更新每个policy的时间, 合并的点取min_max时间
+                    policy_updated[sigma_t][1] = max(policy_updated[sigma_t][1], policy_current[sigma_t][1])
+
+            is_start_lager_than_end = False
+            is_in_to_merge_list = False
+            for edge_t_t in list(bts.out_edges(node_to_merge_t[0])):
+                if edge_t_t[1] in node_to_merge_t or state_type(edge_t_t[1]) == 'Y_state':                                                          # edge_t_t[1]不能再自己的点集内
+                    continue
+
+                for node_to_merge_c in node_to_merge:
+                    if edge_t_t[1] == node_to_merge_c[0]:                                                   # edge_t_t[1]在其他要合并的点集内
+                        is_in_to_merge_list = True
+                        policy_t = get_policy_duration(edge_t_t[1])
+
+                        for sigma_t in policy_t.keys():
+                            policy_t[sigma_t] = list(policy_t[sigma_t])                                     # tuple -> list, 初始化一下, 后面好赋值
+
+                        for z_state in node_to_merge_c:
+                            policy_current = get_policy_duration(z_state)
+                            for sigma_t in policy_t.keys():
+                                policy_t[sigma_t][0] = min(policy_t[sigma_t][0], policy_current[sigma_t][0])# 更新每个policy的时间, 合并的点取min_max时间
+                                policy_t[sigma_t][1] = max(policy_t[sigma_t][1], policy_current[sigma_t][1])
+
+                        for sigma_t in policy_updated.keys():
+                            if sigma_t not in policy_t.keys() or policy_updated[sigma_t][1] > policy_t[sigma_t][1]:
+                                is_start_lager_than_end = True
+                if not is_in_to_merge_list:
+                    policy_t = get_policy_duration(edge_t_t[1])
+
+                    for sigma_t in policy_updated.keys():
+                        if sigma_t not in policy_t.keys() or policy_updated[sigma_t][1] > policy_t[sigma_t][1]:
+                            is_start_lager_than_end = True
+
+                if is_start_lager_than_end and node_to_merge_t not in node_to_merge_to_pop:
+                    node_to_merge_to_pop.append(node_to_merge_t)
+
+        for to_pop_t in node_to_merge_to_pop:
+            iter = node_to_merge.index(to_pop_t)
+            node_to_merge[iter].pop(0)
+
         # 注意这种情况, 所以不要一开始就直接删边, 全部统一加完再删
         #{list: 4}[(('2', '5', '6'), (('a', 3, 4), ('b', 2, 3))), (('2', '5', '6'), (('a', 4, 5), ('b', 2, 3))), (('2', '5', '6'), (('a', 4, 5), ('b', 3, 4))), (('2', '5', '6'), (('a', 4, 5), ('b', 4, 5)))]
         #{list: 3}[(('2', '5', '6'), (('a', 3, 4), ('b', 2, 3))), (('2', '5', '6'), (('a', 3, 4), ('b', 3, 4))), (('2', '5', '6'), (('a', 3, 4), ('b', 4, 5)))]
         #
         node_to_replace_pair = []
+        #out_edge_replace_pair = []
+        new_state_list = []                                                                                 # [(('2', '5', '6'), (('a', 4, 5), ('b', 2, 3))), (('2', '5', '6'), (('a', 4, 5), ('b', 3, 4))), (('2', '5', '6'), (('a', 4, 5), ('b', 4, 5)))]
         for node_to_merge_t in node_to_merge:
             policy_updated = get_policy_duration(node_to_merge_t[0])
             ur_current = node_to_merge_t[0][0]
@@ -559,24 +612,46 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 gamma_t.append((sigma_t, policy_updated[sigma_t][0], policy_updated[sigma_t][1]))           # list -> tuple
 
             new_state = (ur_current, tuple(gamma_t))
-            node_to_replace_pair.append([new_state, node_to_merge_t[0]])
+            new_state_list.append(new_state)
+            if new_state in node_to_merge_t:
+                continue                                                                                    # 防止第二遍计算的时候出BUG
 
-            if new_state == (('2', '5', '6'), (('a', 3, 4), ('b', 2, 5))):
-                print(456)
+            for node_t in node_to_merge_t:
+                node_to_replace_pair.append([new_state, node_t])                                            # node_to_replace_pair.append([new_state, node_to_merge_t[0]]), 原来只是给第一个点加入替代, 因为现在中间可能有多个节点, 所以干脆都加进去, 把以这些点为根节点的点的根节点链接到新结点上
+
+                #for edge_t_t in list(bts.out_edges(node_t)):
+                #    out_edge_replace_pair.append([new_state, edge_t_t[0], edge_t_t[1]])
+
 
             # 找到根节点
             root_node = []
             for edge_t in list(bts.edges):                                                                  # for edge_t in edges_yzz: 这里不能用旧的edges_yzz去查找, 为什么, 因为要时刻更新最新的点, 之前加入的点可能成为之后加入的点的新根节点, 而旧的根节点又要删除
-                if edge_t[1] == node_to_merge_t[0]:
-                    root_node.append(edge_t[0])
+                for node_t in node_to_merge_t:
+                    if edge_t[1] == node_t:                         # edge_t[1] == node_to_merge[0]
+                        root_node.append(edge_t[0])
             # 找到叶子节点
             leaf_node = []
             for edge_t in list(bts.edges):
-                if edge_t[0] == node_to_merge_t[node_to_merge_t.__len__() - 1]:
-                    leaf_node.append(edge_t[1])
+                for node_t in node_to_merge_t:
+                    if edge_t[0] == node_t:                         # edge_t[0] == node_to_merge_t[node_to_merge_t.__len__() - 1]:
+                        leaf_node.append(edge_t[1])
 
-            bts.add_node(new_state)
-            #visited.append(new_state)
+            if new_state not in list(bts.nodes):
+                bts.add_node(new_state)
+                #visited.append(new_state)
+
+            if (('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))) == new_state:
+                print(456)
+            if node_to_merge_t == [(('2', '5', '6'), (('a', 4, 5), ('b', 2, 5))), (('2', '5', '6'), (('a', 5, 6), ('b', 2, 5)))]:
+                print(466)
+
+            #print(list(bts.out_edges((('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))))
+            print(list(bts.in_edges((('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))))
+            print('\n')
+
+            if [((('2', '5', '6'), (('a', 4, 5), ('b', 2, 5))), (('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9)))), ((('2', '5', '6'), (('a', 4, 5), ('b', 2, 5))), (('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))] \
+                == list(bts.in_edges((('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))):
+                print(233)
 
             for node_t in root_node:
                 bts.add_edge(node_t, new_state, control= tuple(gamma_t))
@@ -584,15 +659,29 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     if node_t == pair_t[1]:
                         bts.add_edge(pair_t[0], new_state, control=tuple(gamma_t))                          # 在这个pair内的原始节点都会被删掉, 这个时候就找不到连接了, 所以要把替代的结点连起来
             for node_t in leaf_node:
-                bts.add_edge(new_state, node_t, control=node_t[1])
+                if state_type(node_t) != 'Y_state':
+                    bts.add_edge(new_state, node_t, control=node_t[1])
+                    #for pair_t in out_edge_replace_pair:
+                    #    if node_t == pair_t[2]:
+                    #        bts.add_edge(new_state, node_t, control=node_t[1])
+
+
+
 
         for node_to_merge_t in node_to_merge:
             for z_state in node_to_merge_t:
-                try:
-                    bts.remove_node(z_state)
-                except:
-                    pass
+                if z_state not in new_state_list:
+                    if z_state in [(('2', '5', '6'), (('a', 4, 5), ('b', 4, 5))), (('2', '5', '6'), (('a', 4, 5), ('b', 2, 5)))]:
+                        print(233)
 
+                    try:
+                        bts.remove_node(z_state)
+                    except:
+                        pass
+        print('\n')
+        print('\n')
+        print('\n')
+        print(list(bts.in_edges((('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))))
 
         # 求NX
         # 现有思路：  针对每一个Z状态，求下一状态
