@@ -410,9 +410,6 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 if z_state == ((), ()):
                     continue
 
-                if (('2', '5', '6'), (('a', 5, 6), ('b', 2, 3),)) == z_state:
-                    print(2333)
-
                 if z_state in visited:
                     continue
 
@@ -451,10 +448,6 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                             if event_t[_iter] <= event_tz[_iter]:                               # 2 所有事件对应使能时间都比z_state小
                                 iter_num += 1
                         if iter_num == event_t.__len__():
-                            if (('2', '5', '6'), (('a', 3, 4), ('b', 2, 3),)) == z_state:
-                                print(2333)
-
-                            # print(event_t, '\t', event_tz)
                             state_to_add_t.append(state_t)                                      # 3 满足1、2中，每箱使能时间对应最长, 先存起来, 然后统计
                             #for _iter in event_t.keys():
                             #    t_max_t[_iter] = event_t[_iter]                                # 3 满足1、2中，每箱使能时间对应最长
@@ -640,19 +633,6 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 bts.add_node(new_state)
                 #visited.append(new_state)
 
-            if (('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))) == new_state:
-                print(456)
-            if node_to_merge_t == [(('2', '5', '6'), (('a', 4, 5), ('b', 2, 5))), (('2', '5', '6'), (('a', 5, 6), ('b', 2, 5)))]:
-                print(466)
-
-            #print(list(bts.out_edges((('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))))
-            print(list(bts.in_edges((('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))))
-            print('\n')
-
-            if [((('2', '5', '6'), (('a', 4, 5), ('b', 2, 5))), (('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9)))), ((('2', '5', '6'), (('a', 4, 5), ('b', 2, 5))), (('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))] \
-                == list(bts.in_edges((('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))):
-                print(233)
-
             for node_t in root_node:
                 bts.add_edge(node_t, new_state, control= tuple(gamma_t))
                 for pair_t in node_to_replace_pair:
@@ -671,17 +651,10 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
         for node_to_merge_t in node_to_merge:
             for z_state in node_to_merge_t:
                 if z_state not in new_state_list:
-                    if z_state in [(('2', '5', '6'), (('a', 4, 5), ('b', 4, 5))), (('2', '5', '6'), (('a', 4, 5), ('b', 2, 5)))]:
-                        print(233)
-
                     try:
                         bts.remove_node(z_state)
                     except:
                         pass
-        print('\n')
-        print('\n')
-        print('\n')
-        print(list(bts.in_edges((('2', '3', '5', '6'), (('a', 4, 5), ('b', 5, 9))))))
 
         # 求NX
         # 现有思路：  针对每一个Z状态，求下一状态
@@ -716,7 +689,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                 for path_t in feasible_path:
                                     last_node = path_t[path_t.__len__() - 2]
                                     t_min_t = dfs_tree.edges[last_node, node_t, 0]['t_min']                 # 因为dfs_tree里面会算好累加长度，所以这里只需调用
-                                    t_max_t = dfs_tree.edges[last_node, node_t, 0]['t_max']
+                                    t_max_t = dfs_tree.edges[last_node, node_t, 0]['t_max']                 # 包括后面更新的时候, 把UR从policy里删了, 这个时候仍然不影响， 因为计算dfstree的时候仍然是考虑UR的
                                     if t_min_t < t_min:
                                         t_min = t_min_t
                                     if t_max_t > t_max:
