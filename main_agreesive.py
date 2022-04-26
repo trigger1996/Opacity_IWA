@@ -19,6 +19,17 @@ event_o  = ['o1', 'o2', 'o3']
 event_c  = ['a',  'b',  'o3']
 event_uc = ['o1', 'o2', 'uc']
 
+
+# A, B 形如 [[0,2],[5,10]...]
+def intervalIntersection(A, B):     # https://blog.csdn.net/Desgard_Duan/article/details/100789337
+    i, j = 0, 0
+    res = []
+    while i < len(A) and j < len(B):
+        # ...
+        j += 1
+        i += 1
+    return res
+
 def dfs_edges(G, event_list, event_uc=event_uc, event_uo=event_uo, source=None, depth_limit=None):
     if source is None:
         # edges for all components
@@ -287,9 +298,11 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 max_time_uo.update({event_t: -1})
                 min_time_uo.update({event_t: 1e6})
             for current_node in current_state:
-                dfs_tree = dfs_events(iwa, sc, event_uc=event_uc, event_uo=event_uo, source=current_node)                    ## 待增加对环状结构的适应性
+                sc_uo = list(set(event_uo) & set(sc))
+                dfs_tree = dfs_events(iwa, sc_uo, event_uc=event_uc, event_uo=event_uo, source=current_node)                    ## 待增加对环状结构的适应性
                 t_interval = list(set(t_interval) | set(timeslice(dfs_tree)))
                 t_interval.sort()
+
 
                 # 求出不同事件对应的时间的最大值
                 for u, v, data in dfs_tree.out_edges(data=True):                 # u, v, data in dfs_tree.out_edges(curr_node, data=True)
@@ -312,11 +325,38 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 else:
                 '''
                 if _iter in event_c and _iter in event_uo:
+                    # 可控不可观事件
                     for t in t_interval:
                         if _iter not in event_uo and t >= min_time_uo[_iter] and t < max_time_uo[_iter]:                    # <=
                             sc_timed_t.append((_iter, t))
                         elif _iter in event_uo and t < max_time_uo[_iter]:         # 如果不加 _iter in event_uo 会出错         # <=
                             sc_timed_t.append((_iter, t))
+                elif _iter in event_c and _iter in event_o:
+                    # 可控可观事件
+                    if current_state == ('5',) and 'o3' in sc:
+                        print(233)
+
+                    for current_node in current_state:
+                        sc_uo_t = list(set(event_uo) & set(sc))
+                        dfs_tree_t = dfs_events(iwa, sc_uo_t, event_uc=event_uc, event_uo=event_uo, source=current_node)  ## 待增加对环状结构的适应性
+
+                        if not dfs_tree_t.nodes.__len__():
+                            # 如果很不幸, 这个时候dfs_tree是一个点
+                            for edge_t in list(iwa.out_edges(current_node, data=True)):
+                                if edge_t[2]['event'] == _iter:
+                                    sc_timed_t.append((_iter, edge_t[2]['t_min']))                                      # 将可控可观事件的使能起始时间加入搜索栏
+                                    t_interval.append(edge_t[2]['t_min'])                                               # Added
+                        else:
+                            # 如果这个时候dfs_tree不只是一个点
+                            for node_t in list(dfs_tree_t.nodes()):
+                                for edge_t in list(iwa.out_edges(node_t, data=True)):
+                                    if edge_t[2]['event'] == _iter:
+                                        t =  nx.shortest_path_length(dfs_tree_t, current_node, node_t)
+                                        t += edge_t[2]['t_min']                                                         # 此时可观可控事件对应的使能时间应该是初始点到当前点最短时间 + 可观可控事件最短时间
+                                        sc_timed_t.append((_iter, t))
+                                        t_interval.append(t)                                                            # Added
+
+
                 if sc_timed_t.__len__() != 0:
                     sc_event_tuple.append(sc_timed_t)       # 加入非空元素
                 '''
@@ -328,6 +368,9 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 if sc_timed_t.__len__() != 0:
                     sc_event_tuple.append(sc_timed_t)       # 加入非空元素
                 '''
+
+            t_interval = list(set(t_interval))
+            t_interval.sort()
 
             for i in range(0, sc_event_tuple.__len__()):
                 sc_event_tuple[i] = list(set(sc_event_tuple[i]))
@@ -365,13 +408,10 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
 
                 sc = [sc_ut[0] for sc_ut in supervisor_curr]
 
-
-                if supervisor_curr == [('a', 2), ('b', 1)]:
-                    print(233)
-
                 for current_node in current_state:
                     try:
-                        dfs_tree = dfs_events(iwa, sc, event_uc, event_uo, current_node)
+                        sc_uo_t = list(set(event_uo) & set(sc))
+                        dfs_tree = dfs_events(iwa, sc_uo_t, event_uc, event_uo, current_node)                                       # dfs_events(iwa, sc_uo_t, event_uc, event_uo, current_node)
                         reachable_edge = list(dfs_ur(dfs_tree, supervisor_curr, event_uc, event_uo, source=current_node))
 
                         # edge -> 可达点
@@ -402,6 +442,12 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     z_state = (tuple(ur), tuple(sc_duration))
                 if z_state == ((), ()):
                     continue
+
+                if current_state == ('5',) and 'o3' in sc:
+                    print(233)
+
+                if z_state == (('6',), (),):
+                    print(233)
 
                 is_state_listed = False                                                                     # 查找该点是否被list出来过
                 is_state_listed_in_this_y = False
@@ -489,6 +535,13 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                     #for _iter in t_max_t.keys():
                     #    t_max_t[_iter] = -1             # 初始化，求最大时间
                     state_to_add_t = []
+
+                    # ADDED
+                    if z_state[1] == ():            # 无控制的点必然root_state是y_state
+                        if not is_state_listed:
+                            bts.add_node(z_state)
+                            bts.add_edge(current_state, z_state, control=())
+                        continue                     # 不用往下走了
 
                     # 找到 decision中，满足如下条件的所有点：
                     # Situation 1
@@ -585,12 +638,16 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
         edge_to_add  = []
         for state_t in bts.nodes():
             # 对所有z_states 求NX
+            y_state_w_observations = []
+
             if state_t not in visited and state_type(state_t) == 'Z_state':
-                y_state_w_observations = []     # 同时存放事件和
+
+                if state_t == (('5',), (('o3', 1, float('inf')),)):
+                    print(466)
 
                 # 这边我是希望得到所有事件相同的点，最后再一起处理
                 for node_t in state_t[0]:
-                    for edge_t in iwa.out_edges(node_t, data=True):
+                    for edge_t in list(iwa.out_edges(node_t, data=True)):
                         if edge_t[2]['event'] in event_o:     # 如果存在可到达的事件
 
                             for current_node in current_state:
@@ -599,15 +656,22 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                     continue
 
                                 feasible_path = list(nx.all_simple_paths(dfs_tree, current_node, node_t))
+                                if current_node == node_t and not feasible_path.__len__():
+                                    feasible_path.append([current_node, node_t])                            # ADDED
+
                                 if feasible_path.__len__() == 0:                                            # 如果没有可达路径，则重新查找，怎么可能没有可达路径
                                     continue
 
                                 t_min = 1e6
                                 t_max = -1
                                 for path_t in feasible_path:
-                                    last_node = path_t[path_t.__len__() - 2]
-                                    t_min_t = dfs_tree.edges[last_node, node_t, 0]['t_min']                 # 因为dfs_tree里面会算好累加长度，所以这里只需调用
-                                    t_max_t = dfs_tree.edges[last_node, node_t, 0]['t_max']
+                                    if current_node == node_t and path_t == [current_node, node_t]:
+                                        t_min_t = 0
+                                        t_max_t = 0                                                         # ADDED
+                                    else:
+                                        last_node = path_t[path_t.__len__() - 2]
+                                        t_min_t = dfs_tree.edges[last_node, node_t, 0]['t_min']             # 因为dfs_tree里面会算好累加长度，所以这里只需调用
+                                        t_max_t = dfs_tree.edges[last_node, node_t, 0]['t_max']
                                     if t_min_t < t_min:
                                         t_min = t_min_t
                                     if t_max_t > t_max:
@@ -621,7 +685,7 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                     t_min += edge_t[2]['t_min']
                                     t_max += edge_t[2]['t_max']
 
-                                    y_state_w_observations.append((state_t, edge_t[0], edge_t[1], (edge_t[2]['event'], t_min, t_max)))      # 当前状态，当前状态中出发点，当前状态可达点，事件以及花的时间
+                                    y_state_w_observations.append((state_t, edge_t[0], edge_t[1], (edge_t[2]['event'], t_min, t_max)))      # 当前状态，IWA中当前状态中出发点{0}，IWA中当前状态可达点{1}，事件以及花的时间{2}    {0} -> {2} -> {1}
 
                 if y_state_w_observations.__len__():
 
@@ -637,6 +701,9 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
 
                         nx_timeslice.update({y_t[3][0]: list(set(nx_timeslice[y_t[3][0]]))})        # 去除相同项
                         nx_timeslice[y_t[3][0]].sort()                                              # 排序
+
+                    if state_t == (('2', '3', '6'), (('a', 2, 3),)):
+                        print(466)
 
                     # Step 2: 对每一时间段，求解当前的可达点
                     for event_t in nx_timeslice:
@@ -657,15 +724,12 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                 visited.append(tuple(state_to_add_t))
                                 y_stack.append(tuple(state_to_add_t))
 
-                            if t1 == 13 and t2 == 16:
-                                print(233)
-
                             is_edge_added = False
                             index_ea = None
                             for edge_to_add_t in edge_to_add:
                                 if edge_to_add_t[0] == y_t[0] and edge_to_add_t[1] == tuple(state_to_add_t) and \
                                    event_t == edge_to_add_t[2][0] and \
-                                   (t1 == edge_to_add_t[2][2] or t2 == edge_to_add_t[2][1]):                # 关键，时间一定要相接
+                                   (t1 == edge_to_add_t[2][2] or t2 == edge_to_add_t[2][1]):                # 查找即将增加的nx内, 有没有考虑过当前的情况,  关键，时间一定要相接
                                     is_edge_added = True
                                     index_ea = edge_to_add.index(edge_to_add_t)
                             if not is_edge_added:
@@ -681,8 +745,31 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 bts.add_node(state_to_add[index])
             except:
                 pass
+
+        edge_to_remove = []
         for index in range(0, edge_to_add.__len__()):      # dictionary changed size during iteration
-            bts.add_edge(edge_to_add[index][0], edge_to_add[index][1], observtion=edge_to_add[index][2])
+            # 为了合并状态, 这里其实可以检查一下之前的状态
+            for edge_to_update in list(bts.in_edges(edge_to_add[index][1], data=True)):
+                if edge_to_update[0] == edge_to_add[index][0]:
+                    if edge_to_update[2]['observation'][0] == edge_to_add[index][2][0]:                    # 查看y状态之前的in_edge, 检查有没有起始点相同的状态, 以及观测事件相同
+                        t_1_original = edge_to_update[2]['observation'][1]
+                        t_2_original = edge_to_update[2]['observation'][2]
+                        t_1 = edge_to_add[index][2][1]
+                        t_2 = edge_to_add[index][2][2]
+                        rst = intervalIntersection([[t_1_original, t_2_original]], [[t_1, t_2]])
+                        if not rst.__len__():                                                              # 如果结果非空
+                            edge_to_remove.append(edge_to_update)
+                            edge_to_add[index][2] = (edge_to_add[index][2][0], min(t_1_original, t_1), max(t_2_original, t_2))
+
+                        print(233)
+
+
+        for index in range(0, edge_to_remove.__len__()):
+            bts.remove_edge(edge_to_remove[index][0], edge_to_remove[index][1])
+
+        for index in range(0, edge_to_add.__len__()):  # dictionary changed size during iteration
+            bts.add_edge(edge_to_add[index][0], edge_to_add[index][1], observation=edge_to_add[index][2])
+
 
 
     # 全部算完以后, 再最后做一个trim的工作
@@ -757,6 +844,9 @@ def assign_node_colors(bts):
     return values
 
 def main():
+
+    # CASE 1
+    '''
     fin = open('./IWA_1.yaml', 'r', encoding='utf-8')
     data = yaml.load(fin, Loader=yaml.FullLoader)
 
@@ -774,6 +864,25 @@ def main():
 
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
+
+    init_state = ['8']                                                  # ['0', '6'], ['6'] ['0'] ['8']
+    bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
+    '''
+
+
+    #
+    # CASE 2
+    fin = open('./IWA_2.yaml', 'r', encoding='utf-8')
+    data = yaml.load(fin, Loader=yaml.FullLoader)
+
+    iwa = nx.MultiDiGraph()       # Graph MultiGraph
+    for node_t in data['graph']['nodes']:
+        iwa.add_node(node_t)
+    for edge_t in data['graph']['edges']:
+        event = edge_t[2]['event']
+        t_min = edge_t[2]['t_min']
+        t_max = edge_t[2]['t_max']
+        iwa.add_edge(edge_t[0], edge_t[1], event=event, t_min=t_min, t_max=t_max)
 
     init_state = ['8']                                                  # ['0', '6'], ['6'] ['0'] ['8']
     bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
@@ -813,7 +922,7 @@ def main():
                                                                                                          # https://blog.csdn.net/HsinglukLiu/article/details/107821649
                                                                                                          # https://www.cnpython.com/qa/39393
 
-    nx.draw_networkx_edge_labels(bts, pos, font_size=4.5)                                                # https://blog.csdn.net/u013576018/article/details/60871485
+    nx.draw_networkx_edge_labels(bts, pos, font_size=6.5)                                                # https://blog.csdn.net/u013576018/article/details/60871485        # font_size=4.5
 
     plt.show()
 

@@ -298,9 +298,11 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 max_time_uo.update({event_t: -1})
                 min_time_uo.update({event_t: 1e6})
             for current_node in current_state:
-                dfs_tree = dfs_events(iwa, sc, event_uc=event_uc, event_uo=event_uo, source=current_node)                    ## 待增加对环状结构的适应性
+                sc_uo = list(set(event_uo) & set(sc))
+                dfs_tree = dfs_events(iwa, sc_uo, event_uc=event_uc, event_uo=event_uo, source=current_node)                    ## 待增加对环状结构的适应性
                 t_interval = list(set(t_interval) | set(timeslice(dfs_tree)))
                 t_interval.sort()
+
 
                 # 求出不同事件对应的时间的最大值
                 for u, v, data in dfs_tree.out_edges(data=True):                 # u, v, data in dfs_tree.out_edges(curr_node, data=True)
@@ -323,11 +325,38 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 else:
                 '''
                 if _iter in event_c and _iter in event_uo:
+                    # 可控不可观事件
                     for t in t_interval:
                         if _iter not in event_uo and t >= min_time_uo[_iter] and t < max_time_uo[_iter]:                    # <=
                             sc_timed_t.append((_iter, t))
                         elif _iter in event_uo and t < max_time_uo[_iter]:         # 如果不加 _iter in event_uo 会出错         # <=
                             sc_timed_t.append((_iter, t))
+                elif _iter in event_c and _iter in event_o:
+                    # 可控可观事件
+                    if current_state == ('5',) and 'o3' in sc:
+                        print(233)
+
+                    for current_node in current_state:
+                        sc_uo_t = list(set(event_uo) & set(sc))
+                        dfs_tree_t = dfs_events(iwa, sc_uo_t, event_uc=event_uc, event_uo=event_uo, source=current_node)  ## 待增加对环状结构的适应性
+
+                        if not dfs_tree_t.nodes.__len__():
+                            # 如果很不幸, 这个时候dfs_tree是一个点
+                            for edge_t in list(iwa.out_edges(current_node, data=True)):
+                                if edge_t[2]['event'] == _iter:
+                                    sc_timed_t.append((_iter, edge_t[2]['t_min']))                                      # 将可控可观事件的使能起始时间加入搜索栏
+                                    t_interval.append(edge_t[2]['t_min'])                                               # Added
+                        else:
+                            # 如果这个时候dfs_tree不只是一个点
+                            for node_t in list(dfs_tree_t.nodes()):
+                                for edge_t in list(iwa.out_edges(node_t, data=True)):
+                                    if edge_t[2]['event'] == _iter:
+                                        t =  nx.shortest_path_length(dfs_tree_t, current_node, node_t)
+                                        t += edge_t[2]['t_min']                                                         # 此时可观可控事件对应的使能时间应该是初始点到当前点最短时间 + 可观可控事件最短时间
+                                        sc_timed_t.append((_iter, t))
+                                        t_interval.append(t)                                                            # Added
+
+
                 if sc_timed_t.__len__() != 0:
                     sc_event_tuple.append(sc_timed_t)       # 加入非空元素
                 '''
@@ -339,6 +368,9 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 if sc_timed_t.__len__() != 0:
                     sc_event_tuple.append(sc_timed_t)       # 加入非空元素
                 '''
+
+            t_interval = list(set(t_interval))
+            t_interval.sort()
 
             for i in range(0, sc_event_tuple.__len__()):
                 sc_event_tuple[i] = list(set(sc_event_tuple[i]))
@@ -378,7 +410,8 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
 
                 for current_node in current_state:
                     try:
-                        dfs_tree = dfs_events(iwa, sc, event_uc, event_uo, current_node)
+                        sc_uo_t = list(set(event_uo) & set(sc))
+                        dfs_tree = dfs_events(iwa, sc_uo_t, event_uc, event_uo, current_node)                                       # dfs_events(iwa, sc_uo_t, event_uc, event_uo, current_node)
                         reachable_edge = list(dfs_ur(dfs_tree, supervisor_curr, event_uc, event_uo, source=current_node))
 
                         # edge -> 可达点
@@ -777,6 +810,9 @@ def assign_node_colors(bts):
     return values
 
 def main():
+
+    # CASE 1
+    '''
     fin = open('./IWA_1.yaml', 'r', encoding='utf-8')
     data = yaml.load(fin, Loader=yaml.FullLoader)
 
@@ -794,6 +830,25 @@ def main():
 
     # 求出dfs_tree对应的所有时间点
     #t_interval = timeslice(dfs_tree)
+
+    init_state = ['8']                                                  # ['0', '6'], ['6'] ['0'] ['8']
+    bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
+    '''
+
+
+    #
+    # CASE 2
+    fin = open('./IWA_2.yaml', 'r', encoding='utf-8')
+    data = yaml.load(fin, Loader=yaml.FullLoader)
+
+    iwa = nx.MultiDiGraph()       # Graph MultiGraph
+    for node_t in data['graph']['nodes']:
+        iwa.add_node(node_t)
+    for edge_t in data['graph']['edges']:
+        event = edge_t[2]['event']
+        t_min = edge_t[2]['t_min']
+        t_max = edge_t[2]['t_max']
+        iwa.add_edge(edge_t[0], edge_t[1], event=event, t_min=t_min, t_max=t_max)
 
     init_state = ['8']                                                  # ['0', '6'], ['6'] ['0'] ['8']
     bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc

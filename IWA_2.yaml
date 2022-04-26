@@ -27,3 +27,4 @@ graph:
 
   - ['2',  '5',  {event: o1, t_min: 4, t_max: 6}]
   - ['5',  '6',  {event: o3, t_min: 1, t_max: 4}]
+  - ['2',  '6',  {event: o2, t_min: 1, t_max: 8}]
