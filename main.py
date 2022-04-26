@@ -18,6 +18,16 @@ event_o  = ['o1', 'o2', 'o3']
 event_c  = ['a',  'b',  'o3']
 event_uc = ['o1', 'o2', 'uc']
 
+# A, B 形如 [[0,2],[5,10]...]
+def intervalIntersection(A, B):     # https://blog.csdn.net/Desgard_Duan/article/details/100789337
+    i, j = 0, 0
+    res = []
+    while i < len(A) and j < len(B):
+        # ...
+        j += 1
+        i += 1
+    return res
+
 def number_out_edges(G, node):
     number = 0
     for edge_t in list(G.out_edges(node)):
@@ -714,15 +724,22 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                                     continue
 
                                 feasible_path = list(nx.all_simple_paths(dfs_tree, current_node, node_t))
+                                if current_node == node_t and not feasible_path.__len__():
+                                    feasible_path.append([current_node, node_t])                            # ADDED
+
                                 if feasible_path.__len__() == 0:                                            # 如果没有可达路径，则重新查找，怎么可能没有可达路径
                                     continue
 
                                 t_min = 1e6
                                 t_max = -1
                                 for path_t in feasible_path:
-                                    last_node = path_t[path_t.__len__() - 2]
-                                    t_min_t = dfs_tree.edges[last_node, node_t, 0]['t_min']                 # 因为dfs_tree里面会算好累加长度，所以这里只需调用
-                                    t_max_t = dfs_tree.edges[last_node, node_t, 0]['t_max']                 # 包括后面更新的时候, 把UR从policy里删了, 这个时候仍然不影响， 因为计算dfstree的时候仍然是考虑UR的
+                                    if current_node == node_t and path_t == [current_node, node_t]:
+                                        t_min_t = 0
+                                        t_max_t = 0                                                         # ADDED
+                                    else:
+                                        last_node = path_t[path_t.__len__() - 2]
+                                        t_min_t = dfs_tree.edges[last_node, node_t, 0]['t_min']             # 因为dfs_tree里面会算好累加长度，所以这里只需调用
+                                        t_max_t = dfs_tree.edges[last_node, node_t, 0]['t_max']
                                     if t_min_t < t_min:
                                         t_min = t_min_t
                                     if t_max_t > t_max:
@@ -793,7 +810,29 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 bts.add_node(state_to_add[index])
             except:
                 pass
+
+        edge_to_remove = []
         for index in range(0, edge_to_add.__len__()):      # dictionary changed size during iteration
+            # 为了合并状态, 这里其实可以检查一下之前的状态
+            for edge_to_update in list(bts.in_edges(edge_to_add[index][1], data=True)):
+                if edge_to_update[0] == edge_to_add[index][0]:
+                    if edge_to_update[2]['observation'][0] == edge_to_add[index][2][0]:                    # 查看y状态之前的in_edge, 检查有没有起始点相同的状态, 以及观测事件相同
+                        t_1_original = edge_to_update[2]['observation'][1]
+                        t_2_original = edge_to_update[2]['observation'][2]
+                        t_1 = edge_to_add[index][2][1]
+                        t_2 = edge_to_add[index][2][2]
+                        rst = intervalIntersection([[t_1_original, t_2_original]], [[t_1, t_2]])
+                        if not rst.__len__():                                                              # 如果结果非空
+                            edge_to_remove.append(edge_to_update)
+                            edge_to_add[index][2] = (edge_to_add[index][2][0], min(t_1_original, t_1), max(t_2_original, t_2))
+
+                        print(233)
+
+
+        for index in range(0, edge_to_remove.__len__()):
+            bts.remove_edge(edge_to_remove[index][0], edge_to_remove[index][1])
+
+        for index in range(0, edge_to_add.__len__()):  # dictionary changed size during iteration
             bts.add_edge(edge_to_add[index][0], edge_to_add[index][1], observation=edge_to_add[index][2])
 
     return bts
