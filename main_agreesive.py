@@ -872,6 +872,7 @@ def main():
 
     #
     # CASE 2
+    '''
     fin = open('./IWA_2.yaml', 'r', encoding='utf-8')
     data = yaml.load(fin, Loader=yaml.FullLoader)
 
@@ -885,6 +886,24 @@ def main():
         iwa.add_edge(edge_t[0], edge_t[1], event=event, t_min=t_min, t_max=t_max)
 
     init_state = ['8']                                                  # ['0', '6'], ['6'] ['0'] ['8']
+    bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
+    '''
+
+    #
+    # CASE 3
+    fin = open('./IWA_3.yaml', 'r', encoding='utf-8')
+    data = yaml.load(fin, Loader=yaml.FullLoader)
+
+    iwa = nx.MultiDiGraph()       # Graph MultiGraph
+    for node_t in data['graph']['nodes']:
+        iwa.add_node(node_t)
+    for edge_t in data['graph']['edges']:
+        event = edge_t[2]['event']
+        t_min = edge_t[2]['t_min']
+        t_max = edge_t[2]['t_max']
+        iwa.add_edge(edge_t[0], edge_t[1], event=event, t_min=t_min, t_max=t_max)
+
+    init_state = ['1']                                                  # ['0', '6'], ['6'] ['0'] ['8']
     bts = t_aic(iwa, init_state, event_uo, event_o, event_c, event_uc)  # iwa, ['0', '6'], event_uo, event_o, event_c, event_uc
 
     '''
