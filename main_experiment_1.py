@@ -880,6 +880,10 @@ def main():
 
     nx.draw_networkx_edge_labels(bts, pos, font_size=6.5)                                                # https://blog.csdn.net/u013576018/article/details/60871485        # font_size=4.5
 
+    # print Supervisors for ('(1,3,4)',), ('(1,3,1)',)
+    for _iter in list(nx.all_simple_paths(bts, ('(1,3,4)',), ('(1,3,1)',))):
+        print(_iter)
+
     plt.show()
 
 if __name__ == '__main__':
