@@ -828,10 +828,10 @@ def t_aic(iwa, source, event_uo, event_o, event_c, event_uc):
                 bts.add_edge(node_t, new_state, control=tuple(gamma_t))
 
             for node_t in leaf_node:
-                try:
+                if state_type(node_t) == 'Z_state':
                     bts.add_edge(new_state, node_t, control=node_t[1])
-                except:
-                    pass                ###
+                else:
+                    bts.add_edge(new_state, node_t, observation=bts.edges[edge_t[0], node_t, 0]['observation'])
             try:
                 bts.remove_node(edge_t[0])
             except:
