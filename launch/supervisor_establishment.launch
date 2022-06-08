@@ -1,0 +1,6 @@
+<launch>
+
+    <node name="supervisor_establishment" pkg="opacity_ts_2022" type="supervisor_establishment.py" output="screen" >
+    </node>
+
+</launch>

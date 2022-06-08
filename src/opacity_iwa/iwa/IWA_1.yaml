@@ -1,0 +1,38 @@
+#!IWA         # commented
+name: IWA_1
+multi: true
+directed: true
+init: [u1]
+final: []
+graph:
+  nodes:
+    '0': {}
+    '1': {}
+    '2': {}
+    '3': {}
+    '4': {}
+    '5':
+      prop: !!set { secret: null }
+    '6':
+      prop: !!set { secret: null }
+    '7': {}
+    '8': {}
+    '9': {}
+
+  edges:
+  - ['0',  '1',  {event: a,  t_min: 1, t_max: 3}]
+  - ['1',  '2',  {event: b,  t_min: 1, t_max: 4}]
+  - ['2',  '3',  {event: b,  t_min: 3, t_max: 5}]
+  - ['3',  '6',  {event: o1, t_min: 2, t_max: 4}]
+  - ['2',  '5',  {event: a,  t_min: 1, t_max: 2}]
+
+  - ['0',  '4',  {event: b,  t_min: 2, t_max: 4}]
+  - ['4',  '5',  {event: o3, t_min: 1, t_max: 2}]
+  - ['5',  '6',  {event: o2, t_min: 1, t_max: 3}]
+  - ['4',  '7',  {event: b,  t_min: 1, t_max: 3}]
+  - ['7',  '8',  {event: o2, t_min: 3, t_max: 4}]
+
+  - ['8',  '9',  {event: a,  t_min: 1, t_max: 2}]
+  - ['9',  '6',  {event: a,  t_min: 1, t_max: 2}]
+  - ['8',  '6',  {event: a,  t_min: 5, t_max: 7}]
+  - ['6',  '2',  {event: uc, t_min: 2, t_max: 4}]

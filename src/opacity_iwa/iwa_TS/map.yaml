@@ -1,0 +1,12 @@
+#!IWA_Map         # commented
+name: Team_IWA_3_Map
+robot_num: 3
+position:
+    '1': [0.5, 2.5]
+    '2': [1.5, 1.0]
+    '3': [2.5, 3.0]
+    '4': [2.5, 0.5]
+offset:
+    'rover_1' : [-0.3,  0.3]
+    'rover_2' : [ 0.3,  0.0]
+    'rover_3' : [   0, -0.3]
