@@ -62,7 +62,7 @@
       <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-urdf -model $(arg third_tb3) -x $(arg third_tb3_x_pos) -y $(arg third_tb3_y_pos) -z $(arg third_tb3_z_pos) -Y $(arg third_tb3_yaw) -param robot_description" />
     </group>
 
-    <node name="controller_test" pkg="opacity_ts_2022" type="semiphysical_experiment.py" output="screen" >
+    <node name="semiphysical_experiment" pkg="opacity_ts_2022" type="semiphysical_experiment.py" output="screen" >
     </node>
 
     <node pkg="rviz" name="rviz" type="rviz" output="screen" args="-d /home/droneyee/catkin_ws/src/opacity_ts_2022/launch/rviz/semiphysical_experiment.rviz">

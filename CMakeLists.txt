@@ -119,6 +119,7 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
+  ./
 )
 
 ## Declare a C++ library
@@ -135,6 +136,10 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/opacity_ts_2022_node.cpp)
+add_executable(opacity_rover_server_node 
+  src/rover_bridge/wheeltec_server.cpp
+  src/rover_bridge/vehicle_udp_bridge.cpp
+)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -150,6 +155,9 @@ include_directories(
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
+target_link_libraries(opacity_rover_server_node
+    ${catkin_LIBRARIES}
+)
 
 #############
 ## Install ##

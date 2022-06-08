@@ -1,0 +1,265 @@
+#ifndef __Vehicle_Bridge_HPP
+#define __Vehicle_Bridge_HPP
+
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include <cmath>
+
+#include <ros/ros.h>
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/Odometry.h>
+#include <tf/transform_datatypes.h>
+
+using namespace std;
+
+
+typedef struct {
+  double roll;
+  double pitch;
+  double yaw;
+} __rpy;
+
+inline void quat_2_rpy(double x, double y, double z, double w, __rpy &rpy) {
+    geometry_msgs::Pose pose_t;
+
+    pose_t.orientation.x = x;
+    pose_t.orientation.y = y;
+    pose_t.orientation.z = z;
+    pose_t.orientation.w = w;
+
+    tf::Quaternion q;
+    tf::quaternionMsgToTF(pose_t.orientation, q);
+    tf::Matrix3x3(q).getRPY(rpy.roll, rpy.pitch, rpy.yaw);
+}
+
+class __vehicle {
+public:
+
+    __vehicle(ros::NodeHandle nh_t, uint8_t vehicle_id_t) {
+        ros::NodeHandle nh("~");
+
+        this->vehicle_id = vehicle_id_t;
+
+        string vicon_pos_topic_name = string("/server/vicon_pose") + string("_") + to_string(vehicle_id);
+        string vicon_vel_topic_name = string("/server/vicon_vel")  + string("_") + to_string(vehicle_id);
+        string cmd_vel_name         = string("/server/cmd_vel")    + string("_") + to_string(vehicle_id);
+        ros::Subscriber vicon_pose_sub = nh.subscribe(vicon_pos_topic_name.data(), 1, &__vehicle::vicon_pose_cb, this);        // https://wenku.baidu.com/view/d2d39467bd1e650e52ea551810a6f524ccbfcba8.html
+        ros::Subscriber vicon_vel_sub  = nh.subscribe(vicon_vel_topic_name.data(), 1, &__vehicle::vicon_vel_cb, this);
+        ros::Subscriber cmd_vel_sub    = nh.subscribe(cmd_vel_name.data(),         1, &__vehicle::cmd_vel_cb, this);
+        ros::Publisher  odom_pub       = nh.advertise<nav_msgs::Odometry>("odom",  1);
+
+        cout << 233333 << endl;
+    }
+
+    bool init(uint16_t client_port) {
+
+
+        // 初始化UDP
+        memset(&dest_addr, 0, sizeof(struct sockaddr_in));          //每个字节都用0填充
+        dest_addr.sin_family = AF_INET;                             //使用IPV4地址
+        dest_addr.sin_port = htons(client_port);                    //端口
+        /* INADDR_ANY表示不管是哪个网卡接收到数据，只要目的端口是SERV_PORT，就会被该应用程序接收到 */
+        dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);              //自动获取IP地址
+        len = sizeof(dest_addr);
+
+    }
+
+    bool is_vicon_pos_updated = false;
+    void vicon_pose_cb(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+        vicon_pose.pose.position.x = msg->pose.position.x;
+        vicon_pose.pose.position.y = msg->pose.position.y;
+        vicon_pose.pose.position.z = msg->pose.position.z;
+
+        vicon_pose.pose.orientation.x = msg->pose.orientation.x;
+        vicon_pose.pose.orientation.y = msg->pose.orientation.y;
+        vicon_pose.pose.orientation.z = msg->pose.orientation.z;
+        vicon_pose.pose.orientation.w = msg->pose.orientation.w;
+
+        quat_2_rpy(vicon_pose.pose.orientation.x, vicon_pose.pose.orientation.y,
+                vicon_pose.pose.orientation.z, vicon_pose.pose.orientation.w, vicon_rpy);
+
+        printf("456");
+    }
+
+    bool is_vicon_vel_updated = false;
+    void vicon_vel_cb(const geometry_msgs::Twist::ConstPtr& msg) {
+        printf("123");
+    }
+
+    bool is_control_updated = false;
+    void cmd_vel_cb(const geometry_msgs::Twist::ConstPtr& msg) {
+        cmd_vel.linear.x  = msg->linear.x;
+        cmd_vel.angular.z = msg->angular.z;
+
+        printf("789");
+    }
+
+    
+protected:
+
+    ros::NodeHandle *nh;
+
+    int8_t vehicle_id;
+
+
+    struct sockaddr_in dest_addr;
+    int len;
+
+    string   client_ip;
+    uint16_t client_port;
+
+    geometry_msgs::PoseStamped vicon_pose;  // commander_computer -> vehicle
+    geometry_msgs::Twist       vicon_vel;   // commander_computer -> vehicle
+    geometry_msgs::Twist       cmd_vel;     // commander_computer -> vehicle
+    nav_msgs::Odometry         odom;        // vehicle            -> commander_computer
+
+    __rpy vicon_rpy, odom_rpy;
+
+
+    bool refine_VehicleData(string recv, nav_msgs::Odometry &odom, __rpy &rpy) {
+        // x: 0 y: 0 z: 0 roll: 0 pitch: 0 yaw: 0 vx: 0 wz: 0
+        int current_pos = -1, next_pos = -1;
+        char str[25] = { 0 };
+
+        if (recv.find("x: ") != 0)
+            return false;               // 检查数据包正确性
+
+        // x
+        current_pos = recv.find("x: ") + strlen("x: ");
+        next_pos    = recv.find("y: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.pose.pose.position.x = atof(str);
+        
+        // y
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("y: ") + strlen("y: ");
+        next_pos    = recv.find("z: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.pose.pose.position.y = atof(str);
+
+        // z
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("z: ")    + strlen("z: ");
+        next_pos    = recv.find("roll: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.pose.pose.position.z = atof(str);
+
+        // roll
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("roll: ")  + strlen("roll: ");
+        next_pos    = recv.find("pitch: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        rpy.roll = atof(str);
+
+        // pitch
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("pitch: ") + strlen("pitch: ");
+        next_pos    = recv.find("yaw: ")   - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        rpy.pitch = atof(str);
+
+        // yaw
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("yaw: ") + strlen("yaw: ");
+        next_pos    = recv.find("vx: ")  - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        rpy.yaw = atof(str);
+
+        // vx
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("vx: ") + strlen("vx: ");
+        next_pos    = recv.find("vy: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.twist.twist.linear.x = atof(str);
+
+        // vy
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("vy: ") + strlen("vy: ");
+        next_pos    = recv.find("vz: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.twist.twist.linear.y = atof(str);
+
+        // vz
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("vz: ") + strlen("vz: ");
+        next_pos    = recv.find("wx: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.twist.twist.linear.z = atof(str);    
+
+        // wx
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("wx: ") + strlen("wx: ");
+        next_pos    = recv.find("wy: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.twist.twist.angular.x = atof(str);    
+
+        // wy
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("wy: ") + strlen("wy: ");
+        next_pos    = recv.find("wz: ") - strlen(" ");
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.twist.twist.angular.y = atof(str);    
+
+        // wz
+        memset(str, 0, sizeof(char) * 25);
+        current_pos = recv.find("wz: ") + strlen("wz: ");
+        next_pos    = recv.length();
+        for (int i = current_pos, j = 0; i < next_pos; i++, j++) {
+            str[j] = recv.data()[i];
+        }
+        odom.twist.twist.angular.z = atof(str);    
+
+        /*
+        cout << current_pos << " " << next_pos << endl;
+        cout <<  "x: " << odom.pose.pose.position.x 
+            << " y: " << odom.pose.pose.position.y
+            << " y: " << odom.pose.pose.position.z 
+            << " roll: "  << rpy.roll 
+            << " pitch: " << rpy.pitch
+            << " yaw: "   << rpy.yaw 
+            << " vx: "    << odom.twist.twist.linear.x
+            << " vy: "    << odom.twist.twist.linear.y
+            << " vz: "    << odom.twist.twist.linear.z
+            << " wx: "    << odom.twist.twist.angular.z
+            << " wy: "    << odom.twist.twist.angular.y
+            << " wz: "    << odom.twist.twist.angular.z << endl;
+        */
+
+    return true;
+
+    }
+
+
+};
+
+#endif
