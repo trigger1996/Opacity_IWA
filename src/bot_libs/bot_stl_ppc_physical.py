@@ -59,9 +59,9 @@ class bot_stl:
         self.k2 = 0.25
         self.k3 = 0.45
 
-        self.k1_ = self.k1
-        self.k2_ = self.k2
-        self.k3_ = 0.75
+        self.k1_ = 1.05
+        self.k2_ = 1.25
+        self.k3_ = 4.75
 
         self.turn_kp = 1
         self.turn_ki = 0

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <param name="server_ip"   value="127.0.0.1" />
+    <param name="server_port" value="8000" />
+
+    <!-- Supervisor -->
+    <node name="controller_test_physical" pkg="opacity_ts_2022" type="controller_test_physical.py" output="screen">
+    </node>
+
+    <!-- Rover Bridge -->
+    <node name="rover_bridge" pkg="opacity_ts_2022" type="opacity_rover_server_node" output="screen">
+    </node>
+
+    <!-- Vicon -->
+    <arg name="server" default="192.168.151.100"/>
+    <node pkg="vrpn_client_ros" type="vrpn_client_node" name="vrpn_client_node" output="screen">
+      <rosparam subst_value="true">
+        server: $(arg server)
+        port: 3883
+
+        update_frequency: 100.0
+        frame_id: world
+
+        # Use the VRPN server's time, or the client's ROS time.
+        use_server_time: false
+        broadcast_tf: true
+
+        # Must either specify refresh frequency > 0.0, or a list of trackers to create
+        refresh_tracker_frequency: 1.0
+        #trackers:
+        #- FirstTracker
+        #- SecondTracker
+      </rosparam>
+    </node>
+
+    <node pkg="rviz" name="rviz" type="rviz" output="screen" args="-d /home/droneyee/catkin_ws/src/opacity_ts_2022/launch/rviz/physical_experiment.rviz">
+    </node>
+
+</launch>
