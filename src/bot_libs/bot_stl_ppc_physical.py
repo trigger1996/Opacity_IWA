@@ -55,12 +55,12 @@ class bot_stl:
         self.yaw = 0
         self.w = 0
 
-        self.k1 = 4.35
+        self.k1 = 3.35
         self.k2 = 0.25
         self.k3 = 0.45
 
-        self.k1_ = 1.05
-        self.k2_ = 1.25
+        self.k1_ = 0.45
+        self.k2_ = 2.25
         self.k3_ = 4.75
 
         self.turn_kp = 1
