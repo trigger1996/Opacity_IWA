@@ -13,7 +13,7 @@ event_o  = ['bgb', 'gbg',  'gbb',  'ggb']
 event_c  = ['bbb', 'gbgu', 'ggbu', 'bgbu', 'bgb', 'gbg',  'gbb',  'ggb']
 event_uc = []
 
-vehicle_r = 0.3
+vehicle_r = 0.2
 
 
 
@@ -81,15 +81,15 @@ def main():
     while not rospy.is_shutdown():
         
         # print current position
-        if systick % 500 == 0:
+        if systick % 20 == 0:
             print(bot_1.name, str([bot_1.x, bot_1.y]), str(pos_xy_list[index][0]), control_2_trajectory.is_reached_target(bot_1.x, bot_1.y, pos_xy_list[index][0][0], pos_xy_list[index][0][1]))
             print(bot_2.name, str([bot_2.x, bot_2.y]), str(pos_xy_list[index][1]), control_2_trajectory.is_reached_target(bot_2.x, bot_2.y, pos_xy_list[index][1][0], pos_xy_list[index][1][1]))
             print(bot_3.name, str([bot_3.x, bot_3.y]), str(pos_xy_list[index][2]), control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1]))
 
         # if all robots arrived the destination, then update the waypoints
-        if control_2_trajectory.is_reached_target(bot_1.x, bot_1.y, pos_xy_list[index][0][0], pos_xy_list[index][0][1]) and \
-           control_2_trajectory.is_reached_target(bot_2.x, bot_2.y, pos_xy_list[index][1][0], pos_xy_list[index][1][1]) and \
-           control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1]):
+        if control_2_trajectory.is_reached_target(bot_1.x, bot_1.y, pos_xy_list[index][0][0], pos_xy_list[index][0][1], dist_threshold = 0.45) and \
+           control_2_trajectory.is_reached_target(bot_2.x, bot_2.y, pos_xy_list[index][1][0], pos_xy_list[index][1][1], dist_threshold = 0.45) and \
+           control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1], dist_threshold = 0.45):
             index += 1
             time  += 60
            
@@ -97,10 +97,10 @@ def main():
                 index = pos_xy_list.__len__() - 1
                 time  = pos_xy_list.__len__() * 60
                
-                if systick % 500 == 0:
+                if systick % 20 == 0:
                     print('Supervisor finished!')
             else:
-                if systick % 500 == 0:
+                if systick % 20 == 0:
                     print('All rover arrived destinated positions, ready for next!')
 
         # update control

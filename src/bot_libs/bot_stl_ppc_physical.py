@@ -30,8 +30,8 @@ offset:
     OR USE TF
 '''
 
-x_offset = 1.4
-y_offset = 1.6
+x_offset = 0.                        # disabled
+y_offset = 0.
 
 class bot_stl:
     def __init__(self, name):
@@ -55,13 +55,13 @@ class bot_stl:
         self.yaw = 0
         self.w = 0
 
-        self.k1 = 0.35
-        self.k2 = 1.25
-        self.k3 = 1.45
+        self.k1 = 4.35
+        self.k2 = 0.25
+        self.k3 = 0.45
 
         self.k1_ = self.k1
         self.k2_ = self.k2
-        self.k3_ = 2.85
+        self.k3_ = 0.75
 
         self.turn_kp = 1
         self.turn_ki = 0
