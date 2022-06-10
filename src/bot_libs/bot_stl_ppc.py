@@ -112,7 +112,7 @@ class bot_stl:
         for obstacle in self.obstacle_all:
             x_obs = obstacle[0]
             y_obs = obstacle[1]
-            b_obs_t = sqrt((self.x - x_obs) ** 2 + (self.y - y_obs) ** 2) - 16          # sqrt((self.x - x_obs) ** 2 + (self.y - y_obs) ** 2) - 18
+            b_obs_t = sqrt((self.x - x_obs) ** 2 + (self.y - y_obs) ** 2)          # sqrt((self.x - x_obs) ** 2 + (self.y - y_obs) ** 2) - 18
             b_obs_arr.append(b_obs_t)
         if not b_obs_arr.__len__():
             b_obs = 0
@@ -186,11 +186,14 @@ class bot_stl:
                     ye_p * cos(0.5 * we_p) - xe_p * sin(0.5 * we_p)) + self.k3_ * sin(0.5 * we_p)
 
         # STL & APF  Regulation Function
-        k = 0.1                                                                            # 0.05
+        k = 1                                                                            # 0.05
         lambda_all = 1 - exp(-k * max(b_obs, 0))
 
         self.uv = lambda_all * uv_stl + (1 - lambda_all) * Uv_p
         self.uw = lambda_all * uw_stl + (1 - lambda_all) * Uw_p
+
+        # for debugging
+        #print('APF Target: ',[xr_p, yr_p],' lambda_all: ', str(lambda_all), ' b_obs:', str(b_obs))
 
     def update_twist(self, v=None, w=None):
         if v == None or w == None:
@@ -236,7 +239,7 @@ class bot_stl:
             r = sqrt((x - x_o) ** 2 + (y - y_o) ** 2)
             D_q = (1. / 2) * ((x - x_o) ** 2 + (y - y_o) ** 2) ** (-1. / 2) * np.mat([[2 * (x - x_o)], [2 * (y - y_o)]])
             if r <= r_o:
-                gradient_U2 = gradient_U2 - 2 * 3000 * ((1. / r_o) - (1. / r)) * (1. / (r ** 2)) * D_q
+                gradient_U2 = gradient_U2 - 2 * 5 * ((1. / r_o) - (1. / r)) * (1. / (r ** 2)) * D_q          # gradient_U2 - 2 * 3000 * ((1. / r_o) - (1. / r)) * (1. / (r ** 2)) * D_q
 
         U_all = gradient_U1 + gradient_U2
         gradient_x = float(U_all[0])

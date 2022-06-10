@@ -14,7 +14,7 @@ event_c  = ['bbb', 'gbgu', 'ggbu', 'bgbu', 'bgb', 'gbg',  'gbb',  'ggb']
 event_uc = []
 
 vehicle_r = 0.2
-
+dist_threshold = 0.45
 
 
 def main():
@@ -82,14 +82,15 @@ def main():
         
         # print current position
         if systick % 20 == 0:
-            print(bot_1.name, str([bot_1.x, bot_1.y]), str(pos_xy_list[index][0]), control_2_trajectory.is_reached_target(bot_1.x, bot_1.y, pos_xy_list[index][0][0], pos_xy_list[index][0][1]))
-            print(bot_2.name, str([bot_2.x, bot_2.y]), str(pos_xy_list[index][1]), control_2_trajectory.is_reached_target(bot_2.x, bot_2.y, pos_xy_list[index][1][0], pos_xy_list[index][1][1]))
-            print(bot_3.name, str([bot_3.x, bot_3.y]), str(pos_xy_list[index][2]), control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1]))
+            print(bot_1.name, str([bot_1.x, bot_1.y]), str(pos_xy_list[index][0]), control_2_trajectory.is_reached_target(bot_1.x, bot_1.y, pos_xy_list[index][0][0], pos_xy_list[index][0][1], dist_threshold = dist_threshold))
+            print(bot_2.name, str([bot_2.x, bot_2.y]), str(pos_xy_list[index][1]), control_2_trajectory.is_reached_target(bot_2.x, bot_2.y, pos_xy_list[index][1][0], pos_xy_list[index][1][1], dist_threshold = dist_threshold))
+            print(bot_3.name, str([bot_3.x, bot_3.y]), str(pos_xy_list[index][2]), control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1], dist_threshold = dist_threshold))
+            print('index: ', index)
 
         # if all robots arrived the destination, then update the waypoints
-        if control_2_trajectory.is_reached_target(bot_1.x, bot_1.y, pos_xy_list[index][0][0], pos_xy_list[index][0][1], dist_threshold = 0.45) and \
-           control_2_trajectory.is_reached_target(bot_2.x, bot_2.y, pos_xy_list[index][1][0], pos_xy_list[index][1][1], dist_threshold = 0.45) and \
-           control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1], dist_threshold = 0.45):
+        if control_2_trajectory.is_reached_target(bot_1.x, bot_1.y, pos_xy_list[index][0][0], pos_xy_list[index][0][1], dist_threshold = dist_threshold) and \
+           control_2_trajectory.is_reached_target(bot_2.x, bot_2.y, pos_xy_list[index][1][0], pos_xy_list[index][1][1], dist_threshold = dist_threshold) and \
+           control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1], dist_threshold = dist_threshold):
             index += 1
             time  += 60
            
@@ -99,6 +100,14 @@ def main():
                
                 if systick % 20 == 0:
                     print('Supervisor finished!')
+            
+                    bot_1.uv = 0
+                    bot_1.uw = 0
+                    bot_2.uv = 0
+                    bot_2.uw = 0
+                    bot_3.uv = 0
+                    bot_3.uw = 0
+                    continue
             else:
                 if systick % 20 == 0:
                     print('All rover arrived destinated positions, ready for next!')
@@ -107,7 +116,11 @@ def main():
         if bot_1.is_odom_updated:
             bot_1.update_other_vehicle_pos([[bot_2.x, bot_2.y, vehicle_r], [bot_3.x, bot_3.y, vehicle_r]])
 
-            bot_1.move_end_to_end(pos_xy_list[index][0][0], pos_xy_list[index][0][1], time)
+            if not control_2_trajectory.is_reached_target(bot_1.x, bot_1.y, pos_xy_list[index][0][0], pos_xy_list[index][0][1], dist_threshold = dist_threshold):
+                bot_1.move_end_to_end(pos_xy_list[index][0][0], pos_xy_list[index][0][1], time)
+            else:
+                bot_1.uv = 0
+                bot_1.uw = 0
             bot_1.update_twist()
 
             bot_1.is_odom_updated = False
@@ -115,15 +128,23 @@ def main():
         if bot_2.is_odom_updated:
             bot_2.update_other_vehicle_pos([[bot_1.x, bot_1.y, vehicle_r], [bot_3.x, bot_3.y, vehicle_r]])
 
-            bot_2.move_end_to_end(pos_xy_list[index][1][0], pos_xy_list[index][1][1], time)
+            if not control_2_trajectory.is_reached_target(bot_2.x, bot_2.y, pos_xy_list[index][1][0], pos_xy_list[index][1][1], dist_threshold = dist_threshold):
+                bot_2.move_end_to_end(pos_xy_list[index][1][0], pos_xy_list[index][1][1], time)
+            else:
+                bot_2.uv = 0
+                bot_2.uw = 0
             bot_2.update_twist()
 
             bot_2.is_odom_updated = False
 
-        if bot_3.is_odom_updated:
+        if not bot_3.is_odom_updated:
             bot_3.update_other_vehicle_pos([[bot_1.x, bot_1.y, vehicle_r], [bot_2.x, bot_2.y, vehicle_r]])
 
-            bot_3.move_end_to_end(pos_xy_list[index][2][0], pos_xy_list[index][2][1], time)
+            if control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1], dist_threshold = dist_threshold):
+                bot_3.move_end_to_end(pos_xy_list[index][2][0], pos_xy_list[index][2][1], time)
+            else:
+                bot_3.uv = 0
+                bot_3.uw = 0
             bot_3.update_twist()
 
             bot_3.is_odom_updated = False

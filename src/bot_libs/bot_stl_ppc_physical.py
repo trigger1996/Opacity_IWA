@@ -32,6 +32,7 @@ offset:
 
 x_offset = 0.                        # disabled
 y_offset = 0.
+body_radius = 0.2
 
 class bot_stl:
     def __init__(self, name):
@@ -55,13 +56,13 @@ class bot_stl:
         self.yaw = 0
         self.w = 0
 
-        self.k1 = 3.35
-        self.k2 = 0.25
-        self.k3 = 0.45
+        self.k1 = 0.45
+        self.k2 = 1.45
+        self.k3 = 1.85
 
-        self.k1_ = 0.45
-        self.k2_ = 2.25
-        self.k3_ = 4.75
+        self.k1_ = self.k1
+        self.k2_ = self.k2
+        self.k3_ = 3.85
 
         self.turn_kp = 1
         self.turn_ki = 0
@@ -131,7 +132,7 @@ class bot_stl:
         for obstacle in self.obstacle_all:
             x_obs = obstacle[0]
             y_obs = obstacle[1]
-            b_obs_t = sqrt((self.x - x_obs) ** 2 + (self.y - y_obs) ** 2) - 16          # sqrt((self.x - x_obs) ** 2 + (self.y - y_obs) ** 2) - 18
+            b_obs_t = sqrt((self.x - x_obs) ** 2 + (self.y - y_obs) ** 2) + body_radius         # sqrt((self.x - x_obs) ** 2 + (self.y - y_obs) ** 2) - 18
             b_obs_arr.append(b_obs_t)
         if not b_obs_arr.__len__():
             b_obs = 0
@@ -176,8 +177,6 @@ class bot_stl:
         Uw = wr + self.k2 * vr * sqrt(1 + xe ** 2 + ye ** 2) ** (-1) * (
                     ye * cos(0.5 * we) - xe * sin(0.5 * we)) + self.k3 * sin(0.5 * we)
 
-        #print(yaw_r, self.yaw)
-
         # STL regulation Function
         k = 100
         lambda_stl = 1 - exp(-k * max(b_yaw, 0))
@@ -205,11 +204,15 @@ class bot_stl:
                     ye_p * cos(0.5 * we_p) - xe_p * sin(0.5 * we_p)) + self.k3_ * sin(0.5 * we_p)
 
         # STL & APF  Regulation Function
-        k = 0.1                                                                            # 0.05
+        k = 1                                                                            # 0.05
         lambda_all = 1 - exp(-k * max(b_obs, 0))
 
         self.uv = lambda_all * uv_stl + (1 - lambda_all) * Uv_p
         self.uw = lambda_all * uw_stl + (1 - lambda_all) * Uw_p
+
+        # for debugging
+        #print('APF Target: ',[xr_p, yr_p],' lambda_all: ', str(lambda_all), ' b_obs:', str(b_obs))
+
 
     def update_twist(self, v=None, w=None):
         if v == None or w == None:
@@ -253,9 +256,20 @@ class bot_stl:
             r_o = obstacle[2]
 
             r = sqrt((x - x_o) ** 2 + (y - y_o) ** 2)
-            D_q = (1. / 2) * ((x - x_o) ** 2 + (y - y_o) ** 2) ** (-1. / 2) * np.mat([[2 * (x - x_o)], [2 * (y - y_o)]])
+            #D_q = (1. / 2) * ((x - x_o) ** 2 + (y - y_o) ** 2) ** (-1. / 2) * np.mat([[2 * (x - x_o)], [2 * (y - y_o)]])
+            
+            vec_orthogonal = np.mat([[0.], [0.]])
+            if abs(y - y_o) <= 1.e-2:
+                    vec_orthogonal = np.mat([[2. * (x - x_o)], [0.]])
+            else:
+                    vec_orthogonal = np.mat([[-(x - x_o) /  (y - y_o)], [1.]])
+                    vec_orthogonal = vec_orthogonal / sqrt(vec_orthogonal[0] ** 2 + vec_orthogonal[1] ** 2)
+                    vec_orthogonal = vec_orthogonal * 2 * sqrt((x - x_o) ** 2 + (y - y_o) ** 2)
+
+            D_q = (1. / 2) * ((x - x_o) ** 2 + (y - y_o) ** 2) ** (-1. / 2) * vec_orthogonal
+
             if r <= r_o:
-                gradient_U2 = gradient_U2 - 2 * 3000 * ((1. / r_o) - (1. / r)) * (1. / (r ** 2)) * D_q
+                gradient_U2 = gradient_U2 - 2 * 1.5 * ((1. / r_o) - (1. / r)) * (1. / (r ** 2)) * D_q          # gradient_U2 - 2 * 3000 * ((1. / r_o) - (1. / r)) * (1. / (r ** 2)) * D_q
 
         U_all = gradient_U1 + gradient_U2
         gradient_x = float(U_all[0])

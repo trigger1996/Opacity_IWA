@@ -65,7 +65,7 @@
     <node name="semiphysical_experiment" pkg="opacity_ts_2022" type="semiphysical_experiment.py" output="screen" >
     </node>
 
-    <node pkg="rviz" name="rviz" type="rviz" output="screen" args="-d /home/droneyee/catkin_ws/src/opacity_ts_2022/launch/rviz/semiphysical_experiment.rviz">
+    <node pkg="rviz" name="rviz" type="rviz" output="screen" args="-d /home/ubuntu484/catkin_ws/src/opacity_ts_2022/launch/rviz/semiphysical_experiment.rviz">
     </node>
 
     <node pkg="tf" type="static_transform_publisher" name="$(arg first_tb3)_map_odom_broadcaster" args="0 0 0 0 0 0 /map /$(arg first_tb3)/odom 5" />

@@ -13,7 +13,7 @@ event_o  = ['bgb', 'gbg',  'gbb',  'ggb']
 event_c  = ['bbb', 'gbgu', 'ggbu', 'bgbu', 'bgb', 'gbg',  'gbb',  'ggb']
 event_uc = []
 
-vehicle_r = 0.85
+vehicle_r = 0.55
 
 
 
@@ -29,7 +29,7 @@ def main():
 
 
     # BTS Establishment
-    t_aic_case_3 = t_aic('/home/droneyee/catkin_ws/src/opacity_ts_2022/src/opacity_iwa/iwa_TS/team_3_robots.yaml', ['(1,3,4)'], event_c, event_o, event_uc, event_uo)
+    t_aic_case_3 = t_aic('/home/ubuntu484/catkin_ws/src/opacity_ts_2022/src/opacity_iwa/iwa_TS/team_3_robots.yaml', ['(1,3,4)'], event_c, event_o, event_uc, event_uo)
 
     t_aic_case_3.construct_T_AIC()
 
@@ -64,7 +64,7 @@ def main():
     print(traj_seq)
 
     map_iwa = control_2_trajectory.map()
-    map_iwa.load_map_control_from_yaml('/home/droneyee/catkin_ws/src/opacity_ts_2022/src/opacity_iwa/iwa_TS/map.yaml')
+    map_iwa.load_map_control_from_yaml('/home/ubuntu484/catkin_ws/src/opacity_ts_2022/src/opacity_iwa/iwa_TS/map.yaml')
 
     pos_xy_list = []
     for node_t in traj_seq:
@@ -99,6 +99,14 @@ def main():
                
                 if systick % 500 == 0:
                     print('Supervisor finished!')
+
+                    bot_1.uv = 0
+                    bot_1.uw = 0
+                    bot_2.uv = 0
+                    bot_2.uw = 0
+                    bot_3.uv = 0
+                    bot_3.uw = 0
+                    continue
             else:
                 if systick % 500 == 0:
                     print('All rover arrived destinated positions, ready for next!')
