@@ -10,7 +10,7 @@ def main():
 
     rospy.sleep(2)
 
-    bot_1 = bot_stl_ppc_physical.bot_stl('rover_3')
+    bot_1 = bot_stl_ppc_physical.bot_stl('rover_5')
 
     systick = 0
 

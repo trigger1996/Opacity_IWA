@@ -23,9 +23,9 @@ def main():
 
     rospy.sleep(2)
 
-    bot_1 = bot_stl_ppc_physical.bot_stl('rover_3')
+    bot_1 = bot_stl_ppc_physical.bot_stl('rover_5')
     bot_2 = bot_stl_ppc_physical.bot_stl('rover_4')
-    bot_3 = bot_stl_ppc_physical.bot_stl('rover_5')
+    bot_3 = bot_stl_ppc_physical.bot_stl('rover_3')
 
 
     # BTS Establishment
@@ -137,10 +137,10 @@ def main():
 
             bot_2.is_odom_updated = False
 
-        if not bot_3.is_odom_updated:
+        if bot_3.is_odom_updated:
             bot_3.update_other_vehicle_pos([[bot_1.x, bot_1.y, vehicle_r], [bot_2.x, bot_2.y, vehicle_r]])
 
-            if control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1], dist_threshold = dist_threshold):
+            if not control_2_trajectory.is_reached_target(bot_3.x, bot_3.y, pos_xy_list[index][2][0], pos_xy_list[index][2][1], dist_threshold = dist_threshold):
                 bot_3.move_end_to_end(pos_xy_list[index][2][0], pos_xy_list[index][2][1], time)
             else:
                 bot_3.uv = 0
@@ -148,6 +148,8 @@ def main():
             bot_3.update_twist()
 
             bot_3.is_odom_updated = False
+
+    
 
         systick = (systick + 1) % 2000
         rate.sleep()

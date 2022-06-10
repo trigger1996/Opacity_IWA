@@ -62,7 +62,7 @@ class bot_stl:
 
         self.k1_ = self.k1
         self.k2_ = self.k2
-        self.k3_ = 3.85
+        self.k3_ = 2.85
 
         self.turn_kp = 1
         self.turn_ki = 0
@@ -189,12 +189,12 @@ class bot_stl:
         [gradient_x, gradient_y] = self.calculate_gradient(self.x, self.y, Ap, F)
 
         yawr_p = atan2(gradient_y, gradient_x)
-        xr_p = self.x + 30 * gradient_x
-        yr_p = self.y + 30 * gradient_y
+        xr_p = self.x + gradient_x             # self.x + 30 * gradient_x
+        yr_p = self.y + gradient_y             # self.y + 30 * gradient_y
 
         # APF Unicycle Controller
-        xe_p = cos(self.yaw) * (xr_p - self.x) + sin(self.yaw) * (yr_p - self.y)  # xe
-        ye_p = -sin(self.yaw) * (xr_p - self.x) + cos(self.yaw) * (yr_p - self.y)  # ye
+        xe_p = cos(self.yaw) * (xr_p - self.x) + sin(self.yaw) * (yr_p - self.y)    # xe
+        ye_p = -sin(self.yaw) * (xr_p - self.x) + cos(self.yaw) * (yr_p - self.y)   # ye
         we_p = yawr_p - self.yaw  # we
         vr_p = 0
         wr_p = 0
@@ -260,11 +260,11 @@ class bot_stl:
             
             vec_orthogonal = np.mat([[0.], [0.]])
             if abs(y - y_o) <= 1.e-2:
-                    vec_orthogonal = np.mat([[2. * (x - x_o)], [0.]])
+                    vec_orthogonal = np.mat([[(x - x_o)], [0.]])
             else:
                     vec_orthogonal = np.mat([[-(x - x_o) /  (y - y_o)], [1.]])
                     vec_orthogonal = vec_orthogonal / sqrt(vec_orthogonal[0] ** 2 + vec_orthogonal[1] ** 2)
-                    vec_orthogonal = vec_orthogonal * 2 * sqrt((x - x_o) ** 2 + (y - y_o) ** 2)
+                    vec_orthogonal = vec_orthogonal * sqrt((x - x_o) ** 2 + (y - y_o) ** 2)
 
             D_q = (1. / 2) * ((x - x_o) ** 2 + (y - y_o) ** 2) ** (-1. / 2) * vec_orthogonal
 
